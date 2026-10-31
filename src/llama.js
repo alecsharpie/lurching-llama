@@ -47,14 +47,14 @@ export const HATS = ['No Hat', 'Party Hat', 'Top Hat', 'Beanie', 'Flower Crown',
 export const CROWN = 6; // unlocked by winning a Show
 
 export const PALETTES = [
-  { name: 'Classic Cream', wool: '#f7f0e3', face: '#efe3cf', dark: '#3b2c27', blanket: ['#ff4f8b', '#ffd23f', '#2ec4b6', '#5b3cc4'], pom: '#ff4f8b' },
-  { name: 'Cocoa', wool: '#a8744b', face: '#8c5f3e', dark: '#2b1d17', blanket: ['#2ec4b6', '#ffffff', '#ff9f1c', '#e71d36'], pom: '#2ec4b6' },
-  { name: 'Caramel', wool: '#e3c197', face: '#d4ac7d', dark: '#3a2a20', blanket: ['#7b2cbf', '#ff9e00', '#f15bb5', '#00bbf9'], pom: '#ff9e00' },
-  { name: 'Silver Fox', wool: '#bab5af', face: '#a39d96', dark: '#2a2624', blanket: ['#ef476f', '#06d6a0', '#ffd166', '#118ab2'], pom: '#06d6a0' },
-  { name: 'Midnight', wool: '#4b413b', face: '#3b322d', dark: '#120d0b', blanket: ['#ffd60a', '#ff5d8f', '#4cc9f0', '#ffffff'], pom: '#ffd60a' },
-  { name: 'Choc-Dipped', wool: '#f4ede4', face: '#8b5a3c', dark: '#24170f', blanket: ['#3a86ff', '#ffbe0b', '#fb5607', '#8338ec'], pom: '#3a86ff' },
-  { name: 'Ginger Snap', wool: '#c97b47', face: '#b56a3b', dark: '#2e1a10', blanket: ['#80ed99', '#38a3a5', '#fff3b0', '#e63946'], pom: '#80ed99' },
-  { name: 'Latte', wool: '#d9c7b0', face: '#c6b096', dark: '#33281f', blanket: ['#ff70a6', '#70d6ff', '#ffd670', '#e9ff70'], pom: '#ff70a6' },
+  { name: 'Classic Cream', wool: '#f7f0e3', face: '#efe3cf', dark: '#3b2c27', pom: '#ff4f8b' },
+  { name: 'Cocoa', wool: '#a8744b', face: '#8c5f3e', dark: '#2b1d17', pom: '#2ec4b6' },
+  { name: 'Caramel', wool: '#e3c197', face: '#d4ac7d', dark: '#3a2a20', pom: '#ff9e00' },
+  { name: 'Silver Fox', wool: '#bab5af', face: '#a39d96', dark: '#2a2624', pom: '#06d6a0' },
+  { name: 'Midnight', wool: '#4b413b', face: '#3b322d', dark: '#120d0b', pom: '#ffd60a' },
+  { name: 'Choc-Dipped', wool: '#f4ede4', face: '#8b5a3c', dark: '#24170f', pom: '#3a86ff' },
+  { name: 'Ginger Snap', wool: '#c97b47', face: '#b56a3b', dark: '#2e1a10', pom: '#80ed99' },
+  { name: 'Latte', wool: '#d9c7b0', face: '#c6b096', dark: '#33281f', pom: '#ff70a6' },
 ];
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -97,36 +97,128 @@ function bananaEar(side) {
   return g;
 }
 
-function blanketTexture(colors) {
-  return canvasTexture(512, 128, (ctx, w, h) => {
-    ctx.fillStyle = colors[0];
+// Saddle blankets. Colours: [base, accent, trim, detail]; tassels use all four.
+export const BLANKETS = [
+  { name: 'Andean Fiesta', pattern: 'andean', colors: ['#ff4f8b', '#ffd23f', '#2ec4b6', '#5b3cc4'] },
+  { name: 'Highland Tartan', pattern: 'tartan', colors: ['#b8233a', '#1f5c3a', '#1d2a55', '#ffd23f'] },
+  { name: 'Sunset Stripes', pattern: 'stripes', colors: ['#ff8c42', '#ffd23f', '#ff4f8b', '#7b2cbf'] },
+  { name: 'Polka Picnic', pattern: 'dots', colors: ['#2ec4b6', '#ffffff', '#ff70a6', '#ffd670'] },
+  { name: 'Alpine Diamonds', pattern: 'diamonds', colors: ['#1d3557', '#f1faee', '#e63946', '#a8dadc'] },
+  { name: 'Meadow Moss', pattern: 'plain', colors: ['#5a8f3c', '#f4ecd0', '#e9b44c', '#7a4e2d'] },
+  { name: 'Royal Velvet', pattern: 'plain', colors: ['#5b2a86', '#ffd23f', '#ffd23f', '#ff4f8b'] },
+  { name: 'Bare Fleece', pattern: 'none', colors: ['#ff4f8b', '#ffd23f', '#2ec4b6', '#5b3cc4'] },
+];
+
+// u runs around the barrel (side to side over the spine), v runs nose to tail.
+function blanketTexture(design) {
+  const [base, accent, trim, detail] = design.colors;
+  return canvasTexture(512, 256, (ctx, w, h) => {
+    ctx.fillStyle = base;
     ctx.fillRect(0, 0, w, h);
-    // stripes run along the spine (u = around the back)
-    const bands = [
-      [0.0, 0.07, colors[3]], [0.07, 0.1, colors[1]], [0.1, 0.16, colors[2]],
-      [0.84, 0.9, colors[2]], [0.9, 0.93, colors[1]], [0.93, 1.0, colors[3]],
-      [0.46, 0.54, colors[1]],
-    ];
-    for (const [a, b, c] of bands) { ctx.fillStyle = c; ctx.fillRect(a * w, 0, (b - a) * w, h); }
-    // zig-zags
-    const zig = (x0, x1, c) => {
-      ctx.strokeStyle = c; ctx.lineWidth = 7; ctx.beginPath();
-      const n = 10;
+    const band = (a, b, c) => { ctx.fillStyle = c; ctx.fillRect(a * w, 0, (b - a) * w, h); };
+    const zig = (x0, x1, c, n = 12, lw = 7) => {
+      ctx.strokeStyle = c; ctx.lineWidth = lw; ctx.beginPath();
       for (let i = 0; i <= n; i++) {
         const y = (i / n) * h, x = i % 2 ? x1 : x0;
         i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
       }
       ctx.stroke();
     };
-    zig(0.22 * w, 0.32 * w, colors[3]); zig(0.68 * w, 0.78 * w, colors[3]);
-    zig(0.36 * w, 0.42 * w, colors[2]); zig(0.58 * w, 0.64 * w, colors[2]);
-    // little diamonds
-    ctx.fillStyle = colors[1];
-    for (let i = 0; i < 5; i++) {
-      const cx = 0.5 * w, cy = (i + 0.5) / 5 * h;
-      ctx.beginPath(); ctx.moveTo(cx, cy - 9); ctx.lineTo(cx + 9, cy); ctx.lineTo(cx, cy + 9); ctx.lineTo(cx - 9, cy); ctx.fill();
+    const diamond = (cx, cy, r, c) => {
+      ctx.fillStyle = c; ctx.beginPath();
+      ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r * 0.75, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r * 0.75, cy); ctx.fill();
+    };
+    if (design.pattern === 'andean') {
+      for (const [a, b, c] of [[0.07, 0.1, accent], [0.1, 0.16, trim], [0.84, 0.9, trim], [0.9, 0.93, accent], [0.46, 0.54, accent]]) band(a, b, c);
+      zig(0.22 * w, 0.32 * w, detail); zig(0.68 * w, 0.78 * w, detail);
+      zig(0.36 * w, 0.42 * w, trim); zig(0.58 * w, 0.64 * w, trim);
+      for (let i = 0; i < 6; i++) diamond(0.5 * w, (i + 0.5) / 6 * h, 11, detail);
+    } else if (design.pattern === 'tartan') {
+      ctx.globalAlpha = 0.55;
+      for (let k = 0; k < 6; k++) {
+        band(k / 6 + 0.02, k / 6 + 0.09, accent);
+        ctx.fillStyle = trim; ctx.fillRect(0, (k / 6 + 0.02) * h, w, 0.07 * h);
+      }
+      ctx.globalAlpha = 0.9;
+      for (let k = 0; k < 6; k++) {
+        band(k / 6 + 0.125, k / 6 + 0.135, detail);
+        ctx.fillStyle = detail; ctx.fillRect(0, (k / 6 + 0.125) * h, w, 0.01 * h);
+      }
+      ctx.globalAlpha = 1;
+    } else if (design.pattern === 'stripes') {
+      const cols = [accent, trim, detail, trim, accent];
+      for (let k = 0; k < 9; k++) band(0.04 + k * 0.105, 0.04 + k * 0.105 + 0.05, cols[k % cols.length]);
+    } else if (design.pattern === 'dots') {
+      for (let y = 0; y < 5; y++) for (let x = 0; x < 9; x++) {
+        ctx.fillStyle = (x + y) % 3 === 0 ? trim : accent;
+        ctx.beginPath(); ctx.arc((x + 0.5 + (y % 2) * 0.5) / 9 * w, (y + 0.5) / 5 * h, 13, 0, Math.PI * 2); ctx.fill();
+      }
+    } else if (design.pattern === 'diamonds') {
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 6; x++) {
+        const cx = (x + 0.5) / 6 * w, cy = (y + 0.5) / 4 * h;
+        diamond(cx, cy, 30, (x + y) % 2 ? accent : detail);
+        diamond(cx, cy, 13, trim);
+      }
     }
+    // every blanket gets a woven border along both hems
+    band(0, 0.045, trim); band(0.955, 1, trim);
+    zig(0.012 * w, 0.033 * w, accent, 24, 4); zig(0.967 * w, 0.988 * w, accent, 24, 4);
+    ctx.fillStyle = trim; ctx.fillRect(0, 0, w, 0.04 * h); ctx.fillRect(0, 0.96 * h, w, 0.04 * h);
   });
+}
+
+// Drape a sheet over the barrel: cast rays in toward the spine at every grid point,
+// keep the outermost fleece hit, then smooth it so the cloth bridges the curls
+// instead of sinking into them.
+const BLK = { NA: 41, NZ: 26, PHI: 1.3, Z0: -0.42, Z1: 0.36, CY: 0.05 };
+function drapeBlanket(parts) {
+  const holder = new THREE.Group();
+  for (const [g, pos, rot] of parts) {
+    const m = new THREE.Mesh(g);
+    m.position.set(...pos); m.rotation.set(...rot);
+    holder.add(m);
+  }
+  holder.updateMatrixWorld(true);
+  const ray = new THREE.Raycaster(), o = new THREE.Vector3(), d = new THREE.Vector3();
+  const { NA, NZ, PHI, Z0, Z1, CY } = BLK;
+  let R = [];
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NA; i++) {
+    const phi = -PHI + (2 * PHI * i) / (NA - 1), z = Z0 + ((Z1 - Z0) * j) / (NZ - 1);
+    d.set(-Math.sin(phi), -Math.cos(phi), 0);
+    o.set(0, CY, z).addScaledVector(d, -2);
+    ray.set(o, d);
+    const hit = ray.intersectObjects(holder.children, false)[0];
+    R.push(hit ? 2 - hit.distance : 0.45);
+  }
+  const at = (arr, i, j) => arr[clamp(j, 0, NZ - 1) * NA + clamp(i, 0, NA - 1)];
+  // dilate (rest on the tallest curls), then blur twice
+  R = R.map((_, k) => { const i = k % NA, j = (k / NA) | 0; let m = 0; for (let a = -3; a <= 3; a++) for (let b = -2; b <= 2; b++) m = Math.max(m, at(R, i + a, j + b)); return m; });
+  for (let pass = 0; pass < 2; pass++) {
+    R = R.map((_, k) => { const i = k % NA, j = (k / NA) | 0; let t = 0; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) t += at(R, i + a, j + b); return t / 9; });
+  }
+  const pos = [], uv = [], idx = [];
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NA; i++) {
+    const phi = -PHI + (2 * PHI * i) / (NA - 1), z = Z0 + ((Z1 - Z0) * j) / (NZ - 1);
+    const u = i / (NA - 1), edge = Math.abs(u - 0.5) * 2;
+    const r = at(R, i, j) + 0.008 + 0.03 * edge * edge; // hems stand a touch proud of the wool
+    pos.push(Math.sin(phi) * r, CY + Math.cos(phi) * r, z);
+    uv.push(u, j / (NZ - 1));
+  }
+  for (let j = 0; j < NZ - 1; j++) for (let i = 0; i < NA - 1; i++) {
+    const a = j * NA + i, b = a + 1, c = a + NA, e = c + 1;
+    idx.push(a, c, b, b, c, e);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  // hem points for the tassels: [side][column]
+  g.userData.hem = (side, z) => {
+    const j = clamp(Math.round(((z - Z0) / (Z1 - Z0)) * (NZ - 1)), 0, NZ - 1), i = side > 0 ? NA - 1 : 0;
+    return new THREE.Vector3().fromArray(pos, (j * NA + i) * 3);
+  };
+  return g;
 }
 
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3();
@@ -268,6 +360,7 @@ export class Llama {
     this.name = opts.name || 'Llama';
     this.isPlayer = !!opts.isPlayer;
     this.palette = opts.palette || PALETTES[0];
+    this.design = opts.blanket || BLANKETS[0];
     this.rand = rng(1234 + this.id * 77);
 
     this.pos = new THREE.Vector3().copy(opts.spawn || new THREE.Vector3());
@@ -345,8 +438,8 @@ export class Llama {
       teeth: std('#fffbe8', { roughness: 0.4 }),
       ear: std(pal.face, { vertexColors: true }),
       pom: std(pal.pom, { vertexColors: true }),
-      blanket: std('#ffffff', { map: blanketTexture(pal.blanket), side: THREE.DoubleSide, roughness: 0.85 }),
-      tassels: pal.blanket.map((c) => std(c)),
+      blanket: std('#ffffff', { map: blanketTexture(this.design), side: THREE.DoubleSide, roughness: 0.85 }),
+      tassels: this.design.colors.map((c) => std(c)),
       star: new THREE.MeshBasicMaterial({ color: '#ffe14d' }),
     };
 
@@ -384,13 +477,10 @@ export class Llama {
     mesh(woolA, M.wool, this.body, [0, -0.2, 0], [0.3, 0.18, 0.5]);
 
     // --- blanket with fringe tassels ---
-    const blanketGeo = geo('blanket', () => {
-      const g = new THREE.CylinderGeometry(0.5, 0.5, 0.72, 40, 1, true, Math.PI - 1.15, 2.3);
-      g.rotateX(Math.PI / 2);
-      return g;
-    });
-    const blanket = mesh(blanketGeo, M.blanket, this.body, [0, 0.07, -0.02], [1.04, 0.96, 1]);
-    blanket.castShadow = true;
+    const blanketGeo = geo('blanket', () => drapeBlanket([
+      [torso, [0, 0.04, -0.02], [0, 0, 0]], [chest, [0, 0.02, 0.44], [0.25, 0, 0]], [rump, [0, 0.05, -0.5], [-0.15, 0, 0]],
+    ]));
+    this.blanketM = mesh(blanketGeo, M.blanket, this.body);
     const tasselGeo = mergedGeo('tassel', [
       [new THREE.CylinderGeometry(0.008, 0.012, 0.09, 6).translate(0, -0.045, 0)],
       [new THREE.SphereGeometry(0.022, 10, 8), [0, -0.1, 0]],
@@ -398,9 +488,8 @@ export class Llama {
     this.tassels = [];
     for (const s of [1, -1]) {
       for (let i = 0; i < 7; i++) {
-        const z = -0.33 + i * 0.11;
         const piv = new THREE.Group();
-        piv.position.set(s * 0.456 * 1.04, 0.204 * 0.96 + 0.07, z - 0.02);
+        piv.position.copy(blanketGeo.userData.hem(s, -0.36 + i * 0.11)).add(_v1.set(s * 0.004, -0.004, 0));
         this.body.add(piv);
         const m = M.tassels[(i + (s > 0 ? 0 : 2)) % 4];
         mesh(tasselGeo, m, piv).castShadow = false;
@@ -604,7 +693,7 @@ export class Llama {
       g.add(o);
       return o;
     };
-    const accent = this.palette.blanket[0], second = this.palette.blanket[1];
+    const accent = this.design.colors[0], second = this.design.colors[1];
     if (i === 1) { // party hat
       m(new THREE.ConeGeometry(0.075, 0.2, 20), accent, [0, 0.09, 0], [-0.15, 0, 0]);
       m(new THREE.SphereGeometry(0.025, 10, 8), second, [0, 0.19, -0.015]);
@@ -662,10 +751,19 @@ export class Llama {
     M.ear.color.set(pal.face);
     M.dark.color.set(pal.dark);
     M.pom.color.set(pal.pom);
+  }
+
+  // Swap the saddle blanket (one of BLANKETS); hats and pompoms pick up its colours.
+  setBlanket(design) {
+    this.design = design;
+    const M = this.mats;
     M.blanket.map.dispose();
-    M.blanket.map = blanketTexture(pal.blanket);
+    M.blanket.map = blanketTexture(design);
     M.blanket.needsUpdate = true;
-    M.tassels.forEach((m, i) => m.color.set(pal.blanket[i]));
+    M.tassels.forEach((m, i) => m.color.set(design.colors[i]));
+    const on = design.pattern !== 'none';
+    this.blanketM.visible = on;
+    for (const t of this.tassels) t.piv.visible = on;
     if (this.hatIdx) this.setHat(this.hatIdx); // re-tint the hat to match
   }
 

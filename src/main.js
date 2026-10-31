@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Llama, PALETTES, HATS, CROWN } from './llama.js';
+import { Llama, PALETTES, HATS, CROWN, BLANKETS } from './llama.js';
 import { Course, COURSES } from './course.js';
 import { Sfx } from './audio.js';
 import { clamp, damp, lerp, smoothstep, wrapAngle } from './util.js';
@@ -154,7 +154,7 @@ function makeTag(l) {
   const el = document.createElement('div');
   el.className = 'tag-name';
   el.textContent = l.name;
-  el.style.setProperty('--c', l.palette.blanket[0]);
+  el.style.setProperty('--c', l.design.colors[0]);
   tagLayer.appendChild(el);
   l.tagEl = el;
 }
@@ -183,7 +183,6 @@ function applyStyle(i) {
   const others = PALETTES.filter((_, k) => k !== styleIdx);
   llamas.filter((l) => !l.isPlayer).forEach((b, k) => {
     b.setPalette(others[k % others.length]);
-    b.tagEl?.style.setProperty('--c', b.palette.blanket[0]);
   });
   $('style-name').textContent = PALETTES[styleIdx].name;
   try { localStorage.setItem(STYLE_KEY, String(styleIdx)); } catch { /* storage unavailable */ }
@@ -206,9 +205,28 @@ $('hat-prev').addEventListener('click', () => applyHat(hatIdx - 1, -1));
 $('hat-next').addEventListener('click', () => applyHat(hatIdx + 1));
 llamas.forEach((l) => { if (!l.isPlayer) l.setHat(Math.floor(Math.random() * CROWN)); });
 
+// saddle blankets: the player picks; bots wear the other designs
+const BLANKET_KEY = 'lurching-llama-blanket';
+let blanketIdx = 0;
+try { blanketIdx = Math.abs(parseInt(localStorage.getItem(BLANKET_KEY), 10) || 0) % BLANKETS.length; } catch { /* storage unavailable */ }
+function applyBlanket(i) {
+  blanketIdx = (i + BLANKETS.length) % BLANKETS.length;
+  player.setBlanket(BLANKETS[blanketIdx]);
+  const others = BLANKETS.filter((d, k) => k !== blanketIdx && d.pattern !== 'none');
+  llamas.filter((l) => !l.isPlayer).forEach((b, k) => {
+    b.setBlanket(others[k % others.length]);
+    b.tagEl?.style.setProperty('--c', b.design.colors[0]);
+  });
+  $('blanket-name').textContent = BLANKETS[blanketIdx].name;
+  try { localStorage.setItem(BLANKET_KEY, String(blanketIdx)); } catch { /* storage unavailable */ }
+}
+$('blanket-prev').addEventListener('click', () => applyBlanket(blanketIdx - 1));
+$('blanket-next').addEventListener('click', () => applyBlanket(blanketIdx + 1));
+
 $('style-prev').addEventListener('click', () => applyStyle(styleIdx - 1));
 $('style-next').addEventListener('click', () => applyStyle(styleIdx + 1));
 applyStyle(styleIdx);
+applyBlanket(blanketIdx);
 applyHat(hatIdx);
 
 // --- course picker

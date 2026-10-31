@@ -103,6 +103,7 @@
       background: radial-gradient(ellipse at center, rgba(255,40,100,0) 55%, rgba(255,40,100,0.55) 100%); }
     .pb { color: var(--pink); }
     .pickers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 8px; margin: 0 0 12px; }
+    .pickers > .style-pick:first-child { grid-column: 1 / -1; }
     .style-pick { display: flex; align-items: center; justify-content: space-between; gap: 4px; background: #faf6ff; border-radius: 16px; padding: 6px; min-width: 0; }
     .style-pick div { min-width: 0; flex: 1; }
     .style-pick small { display: block; font-size: 10px; letter-spacing: 0.12em; color: #8a7a9b; font-weight: 900; }
@@ -196,6 +197,11 @@
           <button id="style-prev" aria-label="Previous style">◀</button>
           <div><small>COAT</small><b id="style-name">Classic Cream</b></div>
           <button id="style-next" aria-label="Next style">▶</button>
+        </div>
+        <div class="style-pick">
+          <button id="blanket-prev" aria-label="Previous blanket">◀</button>
+          <div><small>BLANKET</small><b id="blanket-name">Andean Fiesta</b></div>
+          <button id="blanket-next" aria-label="Next blanket">▶</button>
         </div>
         <div class="style-pick">
           <button id="hat-prev" aria-label="Previous hat">◀</button>
