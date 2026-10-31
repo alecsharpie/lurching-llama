@@ -20,11 +20,14 @@ const NECK_DUCK = [0.5, 0.36, 0.3, 0.22, 0.12, 0.04, -0.05, -0.12, -0.18, -0.22]
 // How the balance lean is distributed along the neck (sums to 1).
 const NECK_LEAN_W = [0.04, 0.07, 0.09, 0.11, 0.12, 0.13, 0.13, 0.12, 0.10, 0.09];
 
+// Speeding up is snappy but slowing down and turning are not: a llama this
+// top-heavy skids, and its whole body lurches on with the momentum.
 const PHYS = {
-  walk: 4.2, sprint: 6.4, accel: 11, sprintAccel: 14, airAccel: 3.5,
-  gravity: 24, jumpV: 8.4, turnRate: 6.5, radius: 0.5,
+  walk: 4.8, accel: 8, brake: 5.5, airAccel: 3.2,
+  gravity: 24, jumpV: 8.4, turnRate: 5.5, radius: 0.5,
 };
-const NECK = { K: 12, C: 1.75, G: 6.6, A: 0.3, pull: 3.4 };
+// A: how hard acceleration throws the head; braking (Ab) throws it much harder than setting off.
+const NECK = { K: 12, C: 1.6, G: 6.6, A: 0.3, Ab: 0.6, pull: 2.6 };
 
 // Lateral-sequence walk blends into a pace (lateral pairs together) at speed,
 // which is how camelids actually move.
@@ -55,7 +58,7 @@ export const PALETTES = [
 ];
 
 const UP = new THREE.Vector3(0, 1, 0);
-const NO_INPUT = { x: 0, z: 0, moveLen: 0, jump: false, sprint: false, duck: false };
+const NO_INPUT = { x: 0, z: 0, moveLen: 0, jump: false, duck: false };
 
 // Shared geometry (built once, reused by every llama).
 const GEO = {};
@@ -199,7 +202,7 @@ class NeckTube {
     for (let r = 0; r < TUBE_RINGS - 1; r++) for (let k = 0; k < TUBE_SIDES; k++) {
       const a = r * TUBE_SIDES + k, b = r * TUBE_SIDES + (k + 1) % TUBE_SIDES;
       const c = a + TUBE_SIDES, d = b + TUBE_SIDES;
-      idx.push(a, c, b, b, c, d);
+      idx.push(a, b, c, b, d, c); // counter-clockwise seen from outside
     }
     g.setIndex(idx);
     this.geo = g;
@@ -278,6 +281,7 @@ export class Llama {
     this.jumpCut = true;
 
     this.prevVel = new THREE.Vector2();
+    this.surge = { f: 0, s: 0, vf: 0, vs: 0 }; // body sloshing over the hooves (forward, sideways)
     this.acc = new THREE.Vector2();
 
     // Balance state: the neck as a springy inverted pendulum (world x/z lean in radians).
@@ -305,11 +309,9 @@ export class Llama {
 
     this.blinkT = 1 + this.rand() * 3; this.blink = 0;
     this.chew = this.rand() * 10;
-    this.spitT = 0;      // >0 while the spit animation plays
-    this.spitCD = 0;
     this.lookT = 0; this.lookYaw = 0; this.lookTarget = 0;
     this.lookAt = null;   // optional world point of interest (set by the game)
-    this.annoyed = 0;     // ears pinned back after being hit / spat on
+    this.annoyed = 0;     // ears pinned back after being hit
     this.earTwitch = [0, 0];
 
     this.headPos = new THREE.Vector3();
@@ -688,7 +690,7 @@ export class Llama {
     this.support = null;
     this.neckScaleVel = 2;
     this.idleT = 0;
-    this.kushK = 0;
+    Object.assign(this.surge, { f: 0, s: 0, vf: 0, vs: 0 });
     this.resetLegs();
   }
 
@@ -734,47 +736,6 @@ export class Llama {
     if (this.root.visible) this.neckTube.update(this, this.tubeThick || 1);
   }
 
-  // Gloopy spit splat stuck to the face for a few seconds.
-  splat() {
-    if (!this.splatM) {
-      const g = new THREE.Group();
-      const mat = new THREE.MeshStandardMaterial({ color: '#b6f07a', roughness: 0.15, transparent: true, opacity: 0.85 });
-      for (const [x, y, z, r] of [[0.05, 0.1, 0.19, 0.06], [0.0, 0.05, 0.26, 0.045], [0.08, 0.02, 0.15, 0.035], [-0.03, 0.12, 0.13, 0.03]]) {
-        const b = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), mat);
-        b.position.set(x, y, z); b.scale.set(1, 0.55, 1);
-        g.add(b);
-      }
-      this.splatM = g;
-      this.head.add(g);
-    }
-    this.splatM.rotation.y = (this.rand() - 0.5) * 1.5;
-    this.splatT = 3;
-  }
-
-  // A proud head-toss bleat. Returns false while still cooling down.
-  bleat() {
-    if (this.spitCD > 0 || this.state !== 'normal') return false;
-    this.spitCD = 0.6;
-    this.spitT = 0.35;
-    this.neck.forEach((n, i) => { n.vx -= 3 * (i / NECK_N); });
-    this.neckScaleVel += 2.5;
-    return true;
-  }
-
-  // Llamas spit. Returns the launch point and direction, or null on cooldown.
-  spit() {
-    if (this.spitCD > 0 || this.state !== 'normal') return null;
-    this.spitCD = 1.2;
-    this.spitT = 0.35;
-    const dir = new THREE.Vector3(0, 0.12, 1).transformDirection(this.head.matrixWorld);
-    dir.y = Math.max(dir.y, 0.05);
-    dir.normalize();
-    // the whole neck whips forward with the effort
-    this.neck.forEach((n, i) => { n.vx += 2.5 * (i / NECK_N); });
-    const from = this.head.localToWorld(new THREE.Vector3(0, 0.02, 0.36));
-    return { from, dir };
-  }
-
   // Kick the visual neck springs (world-space direction).
   jiggle(wx, wz) {
     const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
@@ -809,11 +770,9 @@ export class Llama {
     this.time = time;
     const inp = this.state === 'normal' ? input : NO_INPUT;
     this.invuln = Math.max(0, this.invuln - dt);
-    // left alone for a while, a llama folds its legs and lies down ("kush")
+    // standing around for a while earns a big yawn
     const still = this.state === 'normal' && this.grounded && inp.moveLen < 0.05 && !inp.jump && !inp.duck && Math.hypot(this.vel.x, this.vel.z) < 0.3;
     this.idleT = still ? (this.idleT || 0) + dt : 0;
-    const kushTarget = this.idleT > 8 ? 1 : 0;
-    this.kushK = damp(this.kushK || 0, kushTarget, kushTarget ? 1.6 : 7, dt);
     for (const k in this.hitCD) this.hitCD[k] -= dt;
     this.stateT += dt;
     // mashing jump while down gets you up quicker
@@ -844,19 +803,29 @@ export class Llama {
   integrate(dt, inp) {
     const v = this.vel;
     const normal = this.state === 'normal';
-    const sprint = inp.sprint && inp.moveLen > 0.1;
     this.duck = damp(this.duck, inp.duck ? 1 : 0, 8, dt);
-    const maxS = (sprint ? PHYS.sprint : PHYS.walk) * lerp(1, 0.55, this.duck) * (1 - smoothstep(this.kushK || 0));
-    let acc = this.grounded ? (sprint ? PHYS.sprintAccel : PHYS.accel) : PHYS.airAccel;
-    if (!normal) acc = this.grounded ? 7 : 0.3;
+    const maxS = PHYS.walk * lerp(1, 0.55, this.duck);
     let dvx = inp.x * maxS - v.x, dvz = inp.z * maxS - v.z;
-    const dl = Math.hypot(dvx, dvz), maxDv = acc * dt;
+    const dl = Math.hypot(dvx, dvz), sp = Math.hypot(v.x, v.z);
+    let acc;
+    if (!normal) acc = this.grounded ? 7 : 0.3;
+    else if (!this.grounded) acc = PHYS.airAccel;
+    else {
+      // how much of this change fights the current momentum (stopping, reversing, sharp turns)
+      const against = sp > 0.5 && dl > 1e-3 ? clamp(-(dvx * v.x + dvz * v.z) / (dl * sp), 0, 1) : 0;
+      acc = lerp(PHYS.accel, PHYS.brake, against);
+      // badly off balance, the hooves can't do what you ask: the head is driving now
+      acc *= lerp(1, 0.35, smoothstep(((this.balance || 0) - 0.45) / 0.45));
+      this.braking = against > 0.5 && sp > 2.2 ? Math.min(1, sp / PHYS.walk) : 0;
+    }
+    const maxDv = acc * dt;
     if (dl > maxDv) { dvx *= maxDv / dl; dvz *= maxDv / dl; }
     v.x += dvx; v.z += dvz;
 
     // The heavy head drags the body wherever it is leaning: that's the lurch.
     if (normal) {
-      const pull = this.grounded ? NECK.pull : 1.2;
+      // ...and the further it leans, the harder it hauls you along (a stumbling lurch)
+      const pull = (this.grounded ? NECK.pull : 1.2) * (1 + 2.2 * (this.balance || 0) ** 2);
       v.x += this.lean.x * pull * dt;
       v.z += this.lean.y * pull * dt;
     }
@@ -942,10 +911,17 @@ export class Llama {
       // gentle idle sway so the neck always feels alive
       const n1 = noise3(this.time * 0.45, this.id * 3.1, 0) * 0.55;
       const n2 = noise3(this.time * 0.45, this.id * 3.1, 9) * 0.55;
-      const sprintWobble = inp.sprint && inp.moveLen > 0.1 ? 1.45 : 1;
       const K = NECK.K * lerp(1, 1.35, this.duck);
-      const fx = -K * L.x - NECK.C * LV.x + G * sprintWobble * Math.sin(L.x) - A * this.acc.x + n1 + this.ext.x;
-      const fz = -K * L.y - NECK.C * LV.y + G * sprintWobble * Math.sin(L.y) - A * this.acc.y + n2 + this.ext.y;
+      // split the acceleration into the part that slows you down and the rest
+      let ax = this.acc.x, az = this.acc.y, bx = 0, bz = 0;
+      const sp = Math.hypot(this.vel.x, this.vel.z);
+      if (this.grounded && sp > 0.3) {
+        const ux = this.vel.x / sp, uz = this.vel.z / sp, along = ax * ux + az * uz;
+        if (along < 0) { bx = along * ux; bz = along * uz; ax -= bx; az -= bz; }
+      }
+      const Ab = this.grounded ? NECK.Ab : 0.05;
+      const fx = -K * L.x - NECK.C * LV.x + G * Math.sin(L.x) - A * ax - Ab * bx + n1 + this.ext.x;
+      const fz = -K * L.y - NECK.C * LV.y + G * Math.sin(L.y) - A * az - Ab * bz + n2 + this.ext.y;
       LV.x += fx * dt; LV.y += fz * dt;
       L.x += LV.x * dt; L.y += LV.y * dt;
       const m = L.length();
@@ -978,7 +954,6 @@ export class Llama {
   }
 
   updateGait(dt) {
-    if ((this.kushK || 0) > 0.1) { this.speed = Math.hypot(this.vel.x, this.vel.z); return; } // lying down: feet stay put
     const speed = Math.hypot(this.vel.x, this.vel.z);
     this.speed = speed;
     this.gaitW = damp(this.gaitW, clamp(speed / 1.2, 0, 1), 6, dt);
@@ -1067,8 +1042,18 @@ export class Llama {
     const sway = Math.sin(ph) * lerp(0.02, 0.07, this.paceB) * gw * (1 - gb);
     // gallop: rocking-horse pitch and a floaty bound between footfalls
     const bob = -Math.cos(ph * 2) * lerp(0.018, 0.03, this.paceB) * gw * (1 - gb) + Math.sin(ph - 0.9) * 0.07 * gb;
-    let pitch = -Math.atan2(fy - hy, 0.97) * 0.85 - af * 0.008 + lf * 0.07 + Math.sin(ph - 0.4) * 0.1 * gb;
-    let roll = Math.atan2(ly - ry, 0.43) * 0.5 + sway + ls * 0.12 - this.yawRate * this.speed * 0.012;
+    // Whole-body inertia: the barrel is a jelly on four planted hooves. Brake and it
+    // surges on, nose diving and rump kicking up; turn and it swings out wide. The
+    // body also tips the way the neck is leaning, so you can see your balance.
+    const as = this.acc.x * rightX + this.acc.y * rightZ;
+    const S = this.surge;
+    const live = normal && this.grounded ? 1 : 0.3;
+    const tf = clamp(-af * 0.034, -0.24, 0.24) * live, ts = clamp(-as * 0.03, -0.2, 0.2) * live;
+    S.vf += (75 * (tf - S.f) - 6.5 * S.vf) * dt;
+    S.vs += (75 * (ts - S.s) - 6.5 * S.vs) * dt;
+    S.f += S.vf * dt; S.s += S.vs * dt;
+    let pitch = -Math.atan2(fy - hy, 0.97) * 0.85 + S.f * 1.6 + lf * 0.3 + Math.sin(ph - 0.4) * 0.1 * gb;
+    let roll = Math.atan2(ly - ry, 0.43) * 0.5 + sway + S.s * 1.7 + ls * 0.32 - this.yawRate * this.speed * 0.012;
     if (!this.grounded && normal) pitch += clamp(-this.vel.y * 0.025, -0.15, 0.15);
     let height = BODY_H + clamp((fy + hy) * 0.5, -0.4, 0.4) * 0.7 + bob - this.duck * 0.08;
 
@@ -1076,18 +1061,19 @@ export class Llama {
     this.squashVel += (-90 * this.squash - 9 * this.squashVel) * dt;
     this.squash += this.squashVel * dt;
 
-    this.bodyPitch = damp(this.bodyPitch, pitch, 12, dt);
-    this.bodyRoll = damp(this.bodyRoll, roll, 12, dt);
+    this.bodyPitch = damp(this.bodyPitch, clamp(pitch, -0.6, 0.6), 12, dt);
+    this.bodyRoll = damp(this.bodyRoll, clamp(roll, -0.6, 0.6), 12, dt);
     this.bodyY = damp(this.bodyY, height, 16, dt);
 
     const tumbleTarget = this.state === 'toppled' ? 1 : 0;
     this.tumble = damp(this.tumble, tumbleTarget, this.state === 'toppled' ? 7 : 4.5, dt);
     const T = smoothstep(this.tumble);
-    const K = smoothstep(this.kushK || 0) * (1 - T);
-    this.body.position.y = lerp(lerp(this.bodyY + this.squash * 0.6, 0.5, K), 0.47, T);
+    this.body.position.y = lerp(this.bodyY + this.squash * 0.6 + Math.abs(S.f) * 0.15, 0.47, T);
+    this.body.position.z = S.f * 0.55 * (1 - T);
+    this.body.position.x = -S.s * 0.55 * (1 - T);
     // camelids get up rear end first: tip nose-down mid-rise, then level out
     const rise = this.state === 'rising' ? Math.sin(clamp(this.stateT / 0.75, 0, 1) * Math.PI) * 0.32 : 0;
-    this.body.rotation.x = lerp(lerp(this.bodyPitch, 0.04, K), this.fallPitch, T) + rise;
+    this.body.rotation.x = lerp(this.bodyPitch, this.fallPitch, T) + rise;
     this.body.rotation.z = lerp(this.bodyRoll, this.fallRoll, T);
     // spine flex: chest and rump bend into turns and flex/extend with the gallop
     const bend = clamp(this.yawRate * 0.06, -0.18, 0.18) * (1 - T);
@@ -1118,8 +1104,8 @@ export class Llama {
       const w = NECK_LEAN_W[i];
       const rest = lerp(NECK_REST[i], NECK_DUCK[i], this.duck);
       const prev = i > 0 ? this.neck[i - 1] : null;
-      const tx = rest + (lf * 1.55 - bodyX) * w + (i > 5 ? nod * 0.3 : 0) - (prev ? prev.vx * 0.012 : 0);
-      const tz = (ls * 1.55 - bodyZ) * w - (prev ? prev.vz * 0.012 : 0);
+      const tx = rest + (lf * 1.8 - bodyX) * w + (i > 5 ? nod * 0.3 : 0) - (prev ? prev.vx * 0.012 : 0);
+      const tz = (ls * 1.8 - bodyZ) * w - (prev ? prev.vz * 0.012 : 0);
       const k = 170 - i * 9, damping = 8.5;
       n.vx += (k * (tx - n.ax) - damping * n.vx) * dt;
       n.vz += (k * (tz - n.az) - damping * n.vz) * dt;
@@ -1151,11 +1137,9 @@ export class Llama {
 
     // jaw chews side to side when idle, gapes when toppled
     this.chew += dt * (this.speed < 0.5 ? 3.2 : 0.8);
-    this.spitT = Math.max(0, this.spitT - dt);
-    this.spitCD = Math.max(0, this.spitCD - dt);
     const panic = this.state === 'normal' ? smoothstep((this.balance - 0.55) / 0.35) : 0;
     let open = this.state === 'toppled' ? 0.25 : Math.max(0, Math.sin(this.chew * 2)) * 0.06;
-    open = Math.max(open, panic * 0.2, this.spitT > 0 ? 0.22 * Math.sin((this.spitT / 0.35) * Math.PI) : 0, yawn * 0.42);
+    open = Math.max(open, panic * 0.2, yawn * 0.42);
     this.jaw.rotation.x = damp(this.jaw.rotation.x, open, 12, dt);
     const blep = this.state === 'toppled' ? 1 : 0;
     this.tongue.scale.setScalar(Math.max(0.001, damp(this.tongue.scale.x, blep, 6, dt)));
@@ -1212,11 +1196,6 @@ export class Llama {
     this.neck[5].g.localToWorld(this.neckPts[0].set(0, 0, 0));
     this.neck[8].g.localToWorld(this.neckPts[1].set(0, 0, 0));
     if (this.propeller) this.propeller.rotation.y += dt * (4 + this.speed * 6);
-    if (this.splatM) {
-      this.splatT = Math.max(0, (this.splatT || 0) - dt);
-      this.splatM.visible = this.splatT > 0;
-      this.splatM.scale.setScalar(Math.min(1, this.splatT * 1.5));
-    }
     this.tubeThick = 1 / Math.sqrt(ns);
 
     // dizzy stars
@@ -1270,15 +1249,6 @@ export class Llama {
       standFet.copy(leg.foot);
       standFet.y += FOOT_H;
       standFet.addScaledVector(bodyFwd, -0.03 * leg.curl);
-
-      const K = smoothstep(this.kushK || 0) * (1 - T);
-      if (K > 0.001 && this.grounded) {
-        // kush: legs folded under the body, front cannons tucked back, hinds forward
-        tmp.set(leg.upperJoint.x * 0.95, leg.upperJoint.y - 0.34, leg.upperJoint.z + (leg.front ? -0.26 : 0.24));
-        tmp.applyMatrix4(bm);
-        tmp.y = Math.max(tmp.y, this.pos.y + 0.06);
-        standFet.lerp(tmp, K);
-      }
 
       if (T > 0.001) {
         // limp, kicking legs while toppled

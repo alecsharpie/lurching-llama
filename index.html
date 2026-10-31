@@ -51,11 +51,6 @@
     #place small { font-size: 26px; color: #fff; -webkit-text-stroke: 0; text-shadow: 0 2px 0 rgba(0,0,0,0.25); }
     #progress { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); width: min(340px, 60vw); height: 12px; background: rgba(255,255,255,0.5); border-radius: 99px; overflow: hidden; border: 2px solid #fff; }
     #progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--teal), var(--yellow), var(--pink)); }
-    #balwrap { position: absolute; left: 20px; bottom: 20px; text-align: center; }
-    #balwrap .lbl { font-size: 18px; color: #fff; text-shadow: 0 2px 0 rgba(43,31,58,0.4); margin-bottom: 4px; }
-    #balance { width: 130px; height: 130px; display: block; filter: drop-shadow(0 4px 0 rgba(43,31,58,0.25)); }
-    #balwrap.danger { animation: wob 0.18s infinite alternate; }
-    @keyframes wob { from { transform: rotate(-5deg) scale(1.04); } to { transform: rotate(5deg) scale(1.04); } }
     #keys { position: absolute; right: 20px; bottom: 20px; font-size: 13px; color: #fff; text-align: right; text-shadow: 0 1px 2px rgba(0,0,0,0.4); line-height: 1.9; }
     #keys kbd { color: var(--ink); text-shadow: none; }
     #count { position: absolute; top: 34%; left: 0; right: 0; text-align: center; font-size: 160px; color: var(--yellow); -webkit-text-stroke: 4px #b5741c; text-shadow: 0 8px 0 #b5741c; }
@@ -77,7 +72,7 @@
     #res-list li.me { background: #ffe3ef; font-weight: 900; }
     #res-list span { width: 38px; font-weight: 900; color: var(--purple); }
     #res-list b { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.15); }
-    body.show-results #balwrap, body.show-results #keys, body.show-results #hint, body.show-results #progress, body.show-results #round { display: none !important; }
+    body.show-results #keys, body.show-results #hint, body.show-results #progress, body.show-results #round { display: none !important; }
     #intro { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 9vh; cursor: pointer; }
     .intro-title { font-size: clamp(36px, 7vw, 76px); color: #fff; -webkit-text-stroke: 3px var(--purple); text-shadow: 0 6px 0 var(--purple); animation: pop 6s ease-out forwards; text-align: center; }
     .intro-sub { margin-top: 10px; font-weight: 900; color: var(--purple); background: rgba(255,255,255,0.85); padding: 6px 16px; border-radius: 99px; font-size: 15px; text-align: center; }
@@ -86,7 +81,6 @@
     #touchui { display: none; }
     body.touch.playing #touchui { display: block; position: fixed; inset: 0; pointer-events: none; }
     body.touch #keys { display: none; }
-    body.touch #balwrap { left: 12px; bottom: auto; top: 10px; transform: scale(0.62); transform-origin: top left; }
     #joy { position: absolute; left: 24px; bottom: 28px; width: 150px; height: 150px; border-radius: 50%; background: rgba(255,255,255,0.35);
       border: 3px solid rgba(255,255,255,0.8); pointer-events: auto; touch-action: none; }
     #knob { position: absolute; left: 45px; top: 45px; width: 60px; height: 60px; border-radius: 50%; background: #fff; box-shadow: 0 4px 0 rgba(91,60,196,0.3); }
@@ -94,9 +88,7 @@
       font: 400 15px 'Lilita One', sans-serif; box-shadow: 0 4px 0 rgba(91,60,196,0.3); user-select: none; -webkit-user-select: none; }
     .tbtn.on, .tbtn:active { background: var(--yellow); }
     #t-jump { right: 26px; bottom: 34px; width: 92px; height: 92px; font-size: 20px; background: var(--pink); color: #fff; }
-    #t-duck { right: 132px; bottom: 26px; width: 64px; height: 64px; }
-    #t-spit { right: 30px; bottom: 142px; width: 64px; height: 64px; }
-    #t-sprint { right: 122px; bottom: 112px; width: 64px; height: 64px; }
+    #t-duck { right: 136px; bottom: 30px; width: 76px; height: 76px; }
     #tags { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
     .tag-name { position: absolute; left: 0; top: 0; padding: 2px 9px; border-radius: 99px; background: rgba(255,255,255,0.88); color: var(--ink);
       font: 900 12px Nunito, sans-serif; white-space: nowrap; border-bottom: 3px solid var(--c); transform-origin: 50% 100%; }
@@ -163,7 +155,6 @@
     @keyframes fade { 0% { opacity: 0; } 12% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
     @media (prefers-reduced-motion: reduce) {
       .pop, .intro-title { animation-name: fade !important; }
-      #balwrap.danger { animation: none; }
     }
   </style>
   <script type="importmap">
@@ -185,14 +176,11 @@
       <div class="controls">
         <kbd>W A S D</kbd><span>Move</span>
         <kbd>Space</kbd><span>Jump</span>
-        <kbd>Shift</kbd><span>Sprint (wobblier!)</span>
         <kbd>C</kbd><span>Duck under bars</span>
-        <kbd>F</kbd><span>Spit</span>
-        <kbd>B</kbd><span>Bleat</span>
         <kbd>Mouse</kbd><span>Look around</span>
         <kbd>R</kbd><span>Respawn</span>
       </div>
-      <p class="tag tip" style="margin-top:-6px;font-size:14px">Balance tip: if your neck is tipping, <b>move toward the lean</b> to get back under it.</p>
+      <p class="tag tip" style="margin-top:-6px;font-size:14px">You're very top-heavy: ease off before you stop, and if you start to tip, <b>walk toward the lean</b>.</p>
       <div class="pickers">
         <div class="style-pick">
           <button id="course-prev" aria-label="Previous course">◀</button>
@@ -236,16 +224,13 @@
     <div id="count" class="big"></div>
     <div id="toast" class="big"></div>
     <div id="wind" class="big">WIND</div>
-    <div id="balwrap"><div class="lbl big">BALANCE</div><canvas id="balance" width="260" height="260"></canvas></div>
-    <div id="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> sprint<br/><kbd>C</kbd> duck · <kbd>F</kbd> spit · <kbd>R</kbd> respawn · <kbd>M</kbd> mute · <kbd>P</kbd> pause</div>
+    <div id="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>C</kbd> duck<br/><kbd>R</kbd> respawn · <kbd>M</kbd> mute · <kbd>P</kbd> pause</div>
   </div>
 
   <div id="touchui">
     <div id="joy"><div id="knob"></div></div>
     <button class="tbtn" id="t-jump">JUMP</button>
     <button class="tbtn" id="t-duck">DUCK</button>
-    <button class="tbtn" id="t-spit">SPIT</button>
-    <button class="tbtn" id="t-sprint">RUN</button>
   </div>
 
   <div id="paused" class="hidden">

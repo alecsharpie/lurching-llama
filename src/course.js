@@ -573,7 +573,7 @@ export class Course {
     ];
     this.hints = [
       { z: 8, text: 'Conveyor! Keep walking and dodge the <b>pushers</b>' },
-      { z: 35, text: 'Rolling logs push you back. <b>Sprint</b> across and stay centred!' },
+      { z: 35, text: 'Rolling logs push you back. Keep going and stay centred!' },
       { z: 66, text: 'The disc tilts toward weight, and your heavy head counts!' },
       { z: 86, text: 'Ride the elevators up. Jump when the next one is level' },
       { z: 111, text: 'Hit a bounce pad with some speed to reach the top deck' },

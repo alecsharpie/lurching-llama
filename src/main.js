@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Llama, PALETTES, HATS, CROWN, TOPPLE } from './llama.js';
+import { Llama, PALETTES, HATS, CROWN } from './llama.js';
 import { Course, COURSES } from './course.js';
 import { Sfx } from './audio.js';
 import { clamp, damp, lerp, smoothstep, wrapAngle } from './util.js';
@@ -95,7 +95,7 @@ function createLlamas() {
   BOT_NAMES.forEach((name, i) => {
     const b = new Llama(scene, course, { palette: PALETTES[(i + 1) % PALETTES.length], name, spawn: spawnPoint(order[i]) });
     const baseSkill = 0.78 + Math.random() * 0.2;
-    b.bot = { wp: 0, lane: (Math.random() - 0.5) * 2, baseSkill, skill: baseSkill, think: 0, hold: false, stuck: 0, lastZ: 0, sprint: false, pause: 0 };
+    b.bot = { wp: 0, lane: (Math.random() - 0.5) * 2, baseSkill, skill: baseSkill, think: 0, hold: false, stuck: 0, lastZ: 0, pause: 0 };
     llamas.push(b);
   });
   for (const l of llamas) { l.checkpoint = 0; l.finished = false; l.finishTime = 0; hookEvents(l); }
@@ -143,72 +143,10 @@ function updateGhost(dt) {
   ghost.ghostStep(dt, game.t, L(0), L(1), L(2), L(3), L(4), a[5]);
 }
 
-// Ground ring under the player's head: keep it over your hooves!
-const headRing = new THREE.Mesh(
-  new THREE.RingGeometry(0.3, 0.42, 40),
-  new THREE.MeshBasicMaterial({ color: '#7dffb0', transparent: true, opacity: 0.7, depthWrite: false, depthTest: false }),
-);
-headRing.renderOrder = 10;
-headRing.rotation.x = -Math.PI / 2;
-scene.add(headRing);
-const hoofDot = new THREE.Mesh(new THREE.CircleGeometry(0.1, 20), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.55, depthWrite: false, depthTest: false }));
-hoofDot.renderOrder = 10;
-hoofDot.rotation.x = -Math.PI / 2;
-scene.add(hoofDot);
-const RING_SAFE = new THREE.Color('#7dffb0'), RING_DANGER = new THREE.Color('#ff3d7f');
-
 // "YOU" marker over the player
 const marker = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.32, 16), new THREE.MeshBasicMaterial({ color: '#ffd23f' }));
 marker.rotation.x = Math.PI;
 scene.add(marker);
-
-// ---------------------------------------------------------------------------
-// Spit! (it's a llama game)
-// ---------------------------------------------------------------------------
-
-const spitGeo = new THREE.SphereGeometry(0.09, 10, 8);
-const spitMat = new THREE.MeshStandardMaterial({ color: '#d9ffb8', roughness: 0.15, transparent: true, opacity: 0.85 });
-const spits = [];
-function spitFrom(l) {
-  const s = l.spit();
-  if (!s) return;
-  const m = new THREE.Mesh(spitGeo, spitMat);
-  m.position.copy(s.from);
-  scene.add(m);
-  const v = s.dir.multiplyScalar(13).add(new THREE.Vector3(l.vel.x, 0, l.vel.z));
-  spits.push({ m, v, owner: l, life: 1.4 });
-  if (l.isPlayer || l.pos.distanceTo(player.pos) < 12) sfx.spit();
-}
-function updateSpits(dt) {
-  for (let i = spits.length - 1; i >= 0; i--) {
-    const s = spits[i];
-    s.life -= dt;
-    s.v.y -= 9 * dt;
-    s.m.position.addScaledVector(s.v, dt);
-    s.m.scale.set(1, 1, 1 + s.v.length() * 0.06).multiplyScalar(1);
-    s.m.lookAt(_t.copy(s.m.position).add(s.v));
-    let hit = null;
-    for (const l of racers) {
-      if (l === s.owner) continue;
-      if (l.headPos.distanceTo(s.m.position) < 0.45) { hit = l; break; }
-      _o.set(l.pos.x, l.pos.y + 1.0, l.pos.z);
-      if (_o.distanceTo(s.m.position) < 0.7) { hit = l; break; }
-    }
-    if (hit) {
-      // splat: the heavy head gets shoved, balance goes wobbly
-      _o.set(s.v.x, 0, s.v.z).normalize().multiplyScalar(2.6);
-      hit.headHit(_o);
-      hit.splat();
-      dust.puff(s.m.position, 0.18);
-      if (hit.isPlayer) { toast('SPLAT!', '#7ccf4f'); sfx.bonk(); }
-      else if (s.owner.isPlayer) { toast('BULLSEYE!', '#7ccf4f'); sfx.boing(); }
-    }
-    if (hit || s.life <= 0 || course.groundAt(s.m.position.x, s.m.position.z, s.m.position.y, 0)?.y > s.m.position.y - 0.1) {
-      scene.remove(s.m);
-      spits.splice(i, 1);
-    }
-  }
-}
 
 // name tags over the other llamas
 const tagLayer = document.getElementById('tags');
@@ -355,8 +293,6 @@ addEventListener('keydown', (e) => {
   else if (e.code === 'Enter' && game.state === 'menu') startQuickRace();
   else if (e.code === 'Enter' && game.state === 'results') $('again').click();
   if (e.code === 'KeyR' && game.state === 'racing' && !player.finished) respawnAtCheckpoint(player);
-  if ((e.code === 'KeyF' || e.code === 'KeyE') && game.state === 'racing') spitFrom(player);
-  if (e.code === 'KeyB' && game.state !== 'menu' && player.bleat()) sfx.bleat(0.95 + Math.random() * 0.2);
   if (e.code === 'KeyP' && (game.state === 'racing' || game.state === 'countdown') && !player.finished) setPaused(true);
   if (e.code === 'KeyM') { sfx.setMuted(!sfx.muted); toast(sfx.muted ? 'SOUND OFF' : 'SOUND ON', '#5b3cc4'); }
 });
@@ -401,7 +337,7 @@ addEventListener('mousemove', (e) => {
 canvas.addEventListener('wheel', (e) => { camDist = clamp(camDist + e.deltaY * 0.005, 5, 15); }, { passive: true });
 
 // --- touch controls: left stick, right-hand buttons, drag anywhere else to look
-const touch = { x: 0, y: 0, sprint: false, duck: false };
+const touch = { x: 0, y: 0, duck: false };
 function setupTouch() {
   document.body.classList.add('touch');
   const joy = $('joy'), knob = $('knob');
@@ -430,12 +366,10 @@ function setupTouch() {
     const up = () => { touch[key] = false; el.classList.remove('on'); };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('pointerleave', up);
   };
-  hold('t-sprint', 'sprint');
   hold('t-duck', 'duck');
   const tj = $('t-jump');
   tj.addEventListener('pointerdown', (e) => { e.preventDefault(); jumpPressed = true; touch.jumpHeld = true; });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) tj.addEventListener(ev, () => { touch.jumpHeld = false; });
-  $('t-spit').addEventListener('pointerdown', (e) => { e.preventDefault(); if (game.state === 'racing') spitFrom(player); });
   // look around by dragging on the open screen
   let lookId = null, lx = 0, ly = 0;
   canvas.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') { lookId = e.pointerId; lx = e.clientX; ly = e.clientY; } });
@@ -453,7 +387,7 @@ function setupTouch() {
 if (matchMedia('(pointer: coarse)').matches) setupTouch();
 
 // --- gamepad (standard mapping): polled once per frame
-const pad = { x: 0, y: 0, lx: 0, ly: 0, jump: false, duck: false, sprint: false, prev: [] };
+const pad = { x: 0, y: 0, lx: 0, ly: 0, jump: false, duck: false, prev: [] };
 const deadzone = (v) => (Math.abs(v) < 0.18 ? 0 : (v - Math.sign(v) * 0.18) / 0.82);
 let padBroken = false; // getGamepads() can throw in iframes without the gamepad permission
 function pollPad(dt) {
@@ -463,14 +397,14 @@ function pollPad(dt) {
     const pads = [...(navigator.getGamepads?.() || [])].filter((g) => g && g.connected);
     gp = pads.find((g) => g.mapping === 'standard') || pads[0];
   } catch { padBroken = true; return; }
-  if (!gp) { pad.x = pad.y = 0; pad.jump = pad.duck = pad.sprint = false; return; }
+  if (!gp) { pad.x = pad.y = 0; pad.jump = pad.duck = false; return; }
   const b = (i) => !!gp.buttons[i]?.pressed;
   const edge = (i) => b(i) && !pad.prev[i];
   pad.x = deadzone(gp.axes[0] || 0); pad.y = deadzone(gp.axes[1] || 0);
   // right stick only on standard-mapped pads (elsewhere axes 2/3 may be triggers resting at -1)
   const std = gp.mapping === 'standard';
   pad.lx = std ? deadzone(gp.axes[2] || 0) : 0; pad.ly = std ? deadzone(gp.axes[3] || 0) : 0;
-  pad.jump = b(0); pad.duck = b(1) || b(4); pad.sprint = b(5) || b(7);
+  pad.jump = b(0); pad.duck = b(1) || b(2) || b(4) || b(5);
   if (edge(0)) {
     if (game.state === 'intro') startCountdown();
     else if (game.state === 'menu') startQuickRace();
@@ -478,8 +412,6 @@ function pollPad(dt) {
     else if (game.paused) setPaused(false);
     else jumpPressed = true;
   }
-  if (edge(2) && game.state === 'racing' && !game.paused) spitFrom(player);
-  if (edge(3) && game.state !== 'menu' && player.bleat()) sfx.bleat(0.95 + Math.random() * 0.2);
   if (edge(9) && (game.state === 'racing' || game.state === 'countdown') && !player.finished) setPaused(!game.paused);
   if (edge(8) && game.state === 'racing' && !player.finished && !game.paused) respawnAtCheckpoint(player);
   if (pad.lx || pad.ly) {
@@ -505,7 +437,6 @@ function playerInput() {
   if (l > 1) { x /= l; z /= l; }
   const inp = {
     x, z, moveLen: Math.min(1, l), jump: jumpPressed, jumpHeld: !!(keys.Space || touch.jumpHeld || pad.jump),
-    sprint: !!(keys.ShiftLeft || keys.ShiftRight || touch.sprint || pad.sprint),
     duck: !!(keys.KeyC || keys.ControlLeft || keys.KeyQ || touch.duck || pad.duck),
   };
   jumpPressed = false;
@@ -531,7 +462,7 @@ function celebrate(l, inp) {
 function botInput(b, dt) {
   const B = b.bot;
   const path = course.path;
-  const inp = { x: 0, z: 0, moveLen: 0, jump: false, sprint: false, duck: false };
+  const inp = { x: 0, z: 0, moveLen: 0, jump: false, duck: false };
   if (b.finished) return celebrate(b, inp);
   if (B.wp >= path.length) B.wp = path.length - 1;
   let wp = path[B.wp];
@@ -592,19 +523,11 @@ function botInput(b, dt) {
   B.think -= dt;
   if (B.think <= 0) {
     B.think = 0.5 + Math.random();
-    // sometimes spit at a llama right in front
-    for (const o of racers) {
-      if (o === b || Math.random() > 0.08) continue;
-      const dx = o.pos.x - b.pos.x, dz = o.pos.z - b.pos.z, d = Math.hypot(dx, dz);
-      if (d > 1.2 && d < 6 && (dx * Math.sin(b.yaw) + dz * Math.cos(b.yaw)) / d > 0.9) { spitFrom(b); break; }
-    }
-    B.sprint = Math.random() < 0.35 && b.balance < 0.3;
     // stuck?
     if (Math.abs(b.pos.z - B.lastZ) < 0.2 && !hold && b.state === 'normal') B.stuck += 1; else B.stuck = 0;
     B.lastZ = b.pos.z;
     if (B.stuck > 4) { B.lane = (Math.random() - 0.5) * 2; B.stuck = 0; inp.jump = true; }
   }
-  inp.sprint = (B.sprint && !wp.plat && wp.w > 1) || !!B.crossing || b.support?.type === 'log' || !!wp.lanes;
 
   // jump gaps
   if (b.grounded && !hold && b.speed > 1.2 && (b.vel.z > 1.6 || B.crossing)) {
@@ -647,7 +570,7 @@ function botInput(b, dt) {
     }
     const ahead = o.z - b.pos.z;
     if (ahead < -2.3 || ahead > 5) continue;
-    if (ahead < 2.4) { inp.sprint = true; continue; } // already in its path: hurry
+    if (ahead < 2.4) continue; // already in its path: keep going
     // will the hammer sweep our lane while we cross its ~3m wide zone?
     let danger = false;
     const tIn = (ahead - 2.3) / 4.5, tOut = (ahead + 2.3) / 4.5;
@@ -655,8 +578,7 @@ function botInput(b, dt) {
       const th = o.amp * Math.sin((course.time + t) * o.omega + o.phase);
       if (Math.abs(Math.sin(th) * o.L - b.pos.x) < 2.2) { danger = true; break; }
     }
-    if (danger && B.skill > 0.8) { inp.x = b.lean.x * 1.5; inp.z = b.lean.y * 1.5 - (ahead < 3.2 ? 0.35 : 0); inp.moveLen = Math.min(1, Math.hypot(inp.x, inp.z)); inp.sprint = false; }
-    else if (!danger) inp.sprint = true;
+    if (danger && B.skill > 0.8) { inp.x = b.lean.x * 1.5; inp.z = b.lean.y * 1.5 - (ahead < 3.2 ? 0.35 : 0); inp.moveLen = Math.min(1, Math.hypot(inp.x, inp.z)); }
   }
   // jump the low sweeper / duck the high one
   for (const o of course.obstacles) {
@@ -744,12 +666,10 @@ function resetRace() {
   camYaw = 0;
   camTarget.copy(player.pos);
   camPull = 99;
-  Object.assign(touch, { x: 0, y: 0, sprint: false, duck: false });
+  Object.assign(touch, { x: 0, y: 0, duck: false });
   $('knob').style.transform = '';
   document.querySelectorAll('.tbtn.on').forEach((b) => b.classList.remove('on'));
   hintIdx = 0;
-  for (const sp of spits) scene.remove(sp.m);
-  spits.length = 0;
 }
 
 // PLAY shows a quick flyover of the course first; RACE AGAIN goes straight to the countdown.
@@ -1028,41 +948,6 @@ const confetti = (() => {
 })();
 
 // ---------------------------------------------------------------------------
-// HUD: balance meter
-// ---------------------------------------------------------------------------
-
-const bal = $('balance');
-const bctx = bal.getContext('2d');
-function drawBalance() {
-  const w = bal.width, h = bal.height, cx = w / 2, cy = h / 2, R = w * 0.42;
-  bctx.clearRect(0, 0, w, h);
-  // danger ring
-  const g = bctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R);
-  g.addColorStop(0, 'rgba(120,255,190,0.85)');
-  g.addColorStop(0.55, 'rgba(255,230,90,0.85)');
-  g.addColorStop(0.9, 'rgba(255,80,130,0.9)');
-  g.addColorStop(1, 'rgba(255,40,100,1)');
-  bctx.fillStyle = g;
-  bctx.beginPath(); bctx.arc(cx, cy, R, 0, Math.PI * 2); bctx.fill();
-  bctx.lineWidth = 6; bctx.strokeStyle = '#ffffff';
-  bctx.stroke();
-  bctx.strokeStyle = 'rgba(255,255,255,0.6)'; bctx.lineWidth = 2;
-  bctx.beginPath(); bctx.moveTo(cx - R, cy); bctx.lineTo(cx + R, cy); bctx.moveTo(cx, cy - R); bctx.lineTo(cx, cy + R); bctx.stroke();
-  // lean dot, in camera space so "up" on the dial is "away from camera"
-  const c = Math.cos(camYaw), s = Math.sin(camYaw);
-  const lf = player.lean.x * s + player.lean.y * c;       // forward
-  const lr = player.lean.x * -c + player.lean.y * s;      // right
-  const k = R / TOPPLE;
-  let dx = lr * k, dy = -lf * k;
-  const dl = Math.hypot(dx, dy);
-  if (dl > R) { dx *= R / dl; dy *= R / dl; }
-  bctx.fillStyle = player.state === 'normal' ? '#3b2c27' : '#ff4f8b';
-  bctx.beginPath(); bctx.arc(cx + dx, cy + dy, w * 0.075, 0, Math.PI * 2); bctx.fill();
-  bctx.lineWidth = 3; bctx.strokeStyle = '#fff'; bctx.stroke();
-  bal.parentElement.classList.toggle('danger', player.balance > 0.7 && player.state === 'normal');
-}
-
-// ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
 
@@ -1137,16 +1022,14 @@ function step(dt) {
       $('count').classList.remove('pop'); void $('count').offsetWidth; $('count').classList.add('pop');
     }
     if (game.countdown <= 0 && hintsOn && !player.finished) {
-      showHint('Your head lags behind you! If the <b>ring under your head</b> drifts or turns red, walk <b>toward</b> it');
+      showHint('You are top-heavy! Ease off before you stop, and if you start to tip, walk <b>toward</b> the lean');
     }
     if (game.countdown <= 0) { game.state = 'racing'; setTimeout(() => { $('count').textContent = ''; }, 700); }
   }
   const racing = game.state === 'racing' || game.state === 'results';
-  // nobody lies down while waiting through the intro and countdown
-  if (game.state === 'intro' || game.state === 'countdown') for (const l of racers) { l.idleT = 0; }
   if (game.state === 'racing' || game.state === 'results') game.raceT += dt;
 
-  const idle = { x: 0, z: 0, moveLen: 0, jump: false, sprint: false, duck: false };
+  const idle = { x: 0, z: 0, moveLen: 0, jump: false, duck: false };
   let pin = game.state === 'racing' && !player.finished ? (testInput ? testInput(simT) : playerInput()) : (jumpPressed = false, idle);
   if (player.finished) pin = celebrate(player, { ...idle });
   for (const l of racers) {
@@ -1175,7 +1058,6 @@ function step(dt) {
     }
   }
 
-  updateSpits(dt);
   if (game.state === 'racing' && !player.finished) recordFrame(dt);
   updateGhost(dt);
   if (game.state === 'racing' && hintsOn && hintIdx < course.hints.length && player.pos.z > course.hints[hintIdx].z) showHint(course.hints[hintIdx++].text);
@@ -1298,19 +1180,9 @@ function updateCamera(dt) {
   sun.target.position.copy(player.pos);
   scene.userData.sky.position.copy(camera.position);
   marker.visible = game.state !== 'menu';
-  const showRing = (game.state === 'racing' || game.state === 'countdown') && player.state === 'normal' && player.grounded;
-  headRing.visible = hoofDot.visible = showRing;
-  if (showRing) {
-    const gy = player.pos.y + 0.03;
-    headRing.position.set(player.headPos.x, gy, player.headPos.z);
-    hoofDot.position.set(player.pos.x + Math.sin(player.yaw) * 1.3, gy, player.pos.z + Math.cos(player.yaw) * 1.3);
-    headRing.material.color.copy(RING_SAFE).lerp(RING_DANGER, clamp((player.balance - 0.3) / 0.6, 0, 1));
-    headRing.material.opacity = 0.3 + clamp(player.balance * 1.2, 0, 0.55);
-    hoofDot.material.opacity = 0.2 + clamp(player.balance, 0, 0.4);
-  }
-  // a little FOV kick when sprinting
-  const sprinting = game.state === 'racing' && player.speed > 5 && !reducedMotion;
-  const fov = damp(camera.fov, sprinting ? 62 : 55, 4, dt);
+  // a little FOV kick at full tilt
+  const fast = game.state === 'racing' && player.speed > 4.4 && !reducedMotion;
+  const fov = damp(camera.fov, fast ? 60 : 55, 4, dt);
   if (Math.abs(fov - camera.fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
   marker.position.copy(player.headPos).add(_o.set(0, 0.75 + Math.sin(game.t * 4) * 0.08, 0));
   marker.rotation.y = game.t * 2;
@@ -1344,7 +1216,6 @@ function updateHud() {
   $('vignette').style.opacity = panic.toFixed(3);
   if (panic > 0.6 && !wasPanicking) sfx.uhoh();
   wasPanicking = panic > 0.4;
-  drawBalance();
   $('timer').textContent = fmtTime(game.raceT);
   const r = rankings();
   const place = r.indexOf(player) + 1;
