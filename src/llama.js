@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, lerp, damp, smoothstep, wrapAngle, woolGeometry, noise3, canvasTexture, rng } from './util.js';
 
 // ---------------------------------------------------------------------------
@@ -110,6 +110,55 @@ export const BLANKETS = [
 ];
 
 // u runs around the barrel (side to side over the spine), v runs nose to tail.
+// One sculpted head: a smooth blend of the skull, muzzle, cheeks, brows and lip pads,
+// found by casting rays out from inside and solving for the surface of a smooth-min
+// of ellipsoids. Muzzle shading is baked into vertex colours.
+function headGeometry() {
+  const E = (cx, cy, cz, rx, ry, rz, tilt = 0) => ({ c: [cx, cy, cz], r: [rx, ry, rz], cs: Math.cos(tilt), sn: Math.sin(tilt) });
+  const parts = [
+    [E(0, 0.075, -0.005, 0.15, 0.135, 0.165), 0],            // cranium
+    [E(0, 0.04, 0.17, 0.1, 0.088, 0.17, 0.12), 0.06],       // long muzzle
+    [E(0, -0.005, 0.07, 0.118, 0.08, 0.13), 0.05],          // cheeks / jowls
+    [E(0, 0.045, 0.285, 0.078, 0.066, 0.064), 0.04],        // soft nose
+    [E(0.029, 0.004, 0.31, 0.04, 0.034, 0.036), 0.012],     // upper-lip pads, split by a cleft
+    [E(-0.029, 0.004, 0.31, 0.04, 0.034, 0.036), 0.012],
+    [E(0.1, 0.152, 0.075, 0.055, 0.026, 0.05, -0.3), 0.035], // brow ridges over the eyes
+    [E(-0.1, 0.152, 0.075, 0.055, 0.026, 0.05, -0.3), 0.035],
+    [E(0, 0.03, -0.1, 0.11, 0.1, 0.1), 0.05],               // back of the skull into the neck
+  ];
+  const ell = (e, x, y, z) => {
+    let px = x - e.c[0], py = y - e.c[1], pz = z - e.c[2];
+    const ty = py * e.cs - pz * e.sn, tz = py * e.sn + pz * e.cs; // pitch the ellipsoid
+    py = ty; pz = tz;
+    const ax = px / e.r[0], ay = py / e.r[1], az = pz / e.r[2];
+    const k0 = Math.hypot(ax, ay, az), k1 = Math.hypot(ax / e.r[0], ay / e.r[1], az / e.r[2]);
+    return k1 > 1e-9 ? (k0 * (k0 - 1)) / k1 : -Math.min(...e.r);
+  };
+  const smin = (a, b, k) => { if (k <= 0) return Math.min(a, b); const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+  const sdf = (x, y, z) => { let d = ell(parts[0][0], x, y, z); for (let i = 1; i < parts.length; i++) d = smin(d, ell(parts[i][0], x, y, z), parts[i][1]); return d; };
+  let g = new THREE.IcosahedronGeometry(1, 6);
+  g.deleteAttribute('normal'); g.deleteAttribute('uv');
+  g = mergeVertices(g);
+  const p = g.attributes.position;
+  const C = [0, 0.05, 0.09], col = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const dx = p.getX(i), dy = p.getY(i), dz = p.getZ(i);
+    // march out until we leave the head, then bisect onto the surface
+    let lo = 0, hi = 0.02;
+    while (hi < 0.5 && sdf(C[0] + dx * hi, C[1] + dy * hi, C[2] + dz * hi) < 0) { lo = hi; hi += 0.02; }
+    for (let k = 0; k < 18; k++) { const m = (lo + hi) / 2; if (sdf(C[0] + dx * m, C[1] + dy * m, C[2] + dz * m) < 0) lo = m; else hi = m; }
+    const x = C[0] + dx * hi, y = C[1] + dy * hi, z = C[2] + dz * hi;
+    p.setXYZ(i, x, y, z);
+    // darker, slightly warmer muzzle and nose; a faint lighter patch around the eyes
+    const muzzle = smoothstep((z - 0.17) / 0.11), nose = smoothstep((z - 0.27) / 0.06);
+    const k = 1 - muzzle * 0.14 - nose * 0.08;
+    col.set([k, k * 0.98, k * 0.96], i * 3);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 function blanketTexture(design) {
   const [base, accent, trim, detail] = design.colors;
   return canvasTexture(512, 256, (ctx, w, h) => {
@@ -428,7 +477,7 @@ export class Llama {
     const M = this.mats = {
       wool: std(pal.wool, { vertexColors: true }),
       face: std(pal.face),
-      muzzle: std(new THREE.Color(pal.face).multiplyScalar(0.8)),
+      head: std(pal.face, { vertexColors: true }),
       faceWool: std(pal.face, { vertexColors: true }),
       dark: std(pal.dark, { roughness: 0.6 }),
       nail: std('#2a211d', { roughness: 0.45 }),
@@ -527,30 +576,28 @@ export class Llama {
     this.neckTube = new NeckTube(M.wool);
     this.scene.add(this.neckTube.mesh);
     const H = this.head;
-    mesh(mergedGeo('skull', [
-      [sphere, [0, 0.07, 0.0], [0.15, 0.135, 0.17]],                     // cranium
-      [sphere, [0, 0.035, 0.17], [0.104, 0.094, 0.165], [0.12, 0, 0]],   // muzzle
-      [sphere, [0, -0.01, 0.06], [0.12, 0.08, 0.13]],                    // cheeks / jowl
-    ]), M.face, H);
-    // camelid muzzle: soft darker tip, two puffy upper-lip pads split by a cleft
-    mesh(mergedGeo('muzzleTip', [
-      [sphere, [0, 0.045, 0.285], [0.08, 0.068, 0.062]],
-      [sphere, [0.03, 0.002, 0.315], [0.042, 0.036, 0.036]],   // upper-lip pads
-      [sphere, [-0.03, 0.002, 0.315], [0.042, 0.036, 0.036]],
-    ]), M.muzzle, H);
+    mesh(geo('head', headGeometry), M.head, H);
     mesh(mergedGeo('nostrils', [
       [sphere, [0.036, 0.072, 0.335], [0.006, 0.02, 0.008], [-0.5, 0, 0.65]],  // slit nostrils
       [sphere, [-0.036, 0.072, 0.335], [0.006, 0.02, 0.008], [-0.5, 0, -0.65]],
       [sphere, [0, 0.008, 0.349], [0.004, 0.03, 0.008]],                        // lip cleft
     ]), M.dark, H).castShadow = false;
-    mesh(woolC, M.faceWool, H, [0, 0.19, 0.03], [0.1, 0.075, 0.11]);                  // forelock tuft
+    mesh(woolC, M.faceWool, H, [0, 0.18, 0.02], [0.11, 0.07, 0.12]);                  // forelock tuft
 
     // dark mouth interior, only visible when the jaw drops
-    mesh(sphere, std('#7a2f45', { roughness: 0.5 }), H, [0, -0.03, 0.225], [0.062, 0.03, 0.085]).castShadow = false;
+    mesh(sphere, std('#7a2f45', { roughness: 0.5 }), H, [0, -0.012, 0.22], [0.05, 0.02, 0.075]).castShadow = false;
     this.jaw = new THREE.Group();
     this.jaw.position.set(0, -0.005, 0.07);
     H.add(this.jaw);
-    mesh(sphere, M.face, this.jaw, [0, -0.028, 0.12], [0.084, 0.042, 0.14]);
+    // lower jaw: a soft chin tucked under the muzzle, shaded to match it
+    mesh(geo('jaw', () => {
+      const g = new THREE.SphereGeometry(1, 24, 16);
+      g.scale(0.07, 0.036, 0.125).translate(0, -0.024, 0.11);
+      const p = g.attributes.position, col = new Float32Array(p.count * 3);
+      for (let i = 0; i < p.count; i++) { const k = 1 - smoothstep((p.getZ(i) + 0.07 - 0.17) / 0.11) * 0.14 - 0.04; col.set([k, k * 0.98, k * 0.96], i * 3); }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      return g;
+    }), M.head, this.jaw);
     mesh(geo('lip', () => new THREE.BoxGeometry(1, 1, 1)), M.teeth, this.jaw, [0, 0.0, 0.245], [0.05, 0.022, 0.016]);
     // tongue: flops out sideways when dazed (a proper llama "blep")
     this.tongue = new THREE.Group();
@@ -757,7 +804,7 @@ export class Llama {
     const M = this.mats;
     M.wool.color.set(pal.wool);
     M.face.color.set(pal.face);
-    M.muzzle.color.set(pal.face).multiplyScalar(0.8);
+    M.head.color.set(pal.face);
     M.faceWool.color.set(pal.face);
     M.ear.color.set(pal.face);
     M.dark.color.set(pal.dark);
