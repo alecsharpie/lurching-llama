@@ -6,7 +6,7 @@ brake and your whole body lurches on, the neck flinging forward and dragging you
 your head over your hooves, dodge the obstacles, and wobble to the finish ahead of seven bot
 llamas.
 
-**Play it online:** https://alecsharpie.github.io/lurching-llama/
+**Play it online:** https://www.alecsharpie.me/lurching-llama/
 
 ## Play
 
