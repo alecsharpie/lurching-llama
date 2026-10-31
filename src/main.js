@@ -20,8 +20,8 @@ renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-const HORIZON = new THREE.Color('#ffd9ee');
-scene.fog = new THREE.Fog(HORIZON, 70, 260);
+const HORIZON = new THREE.Color('#d9e8ef');
+scene.fog = new THREE.Fog(HORIZON, 80, 650);
 
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 900);
 
@@ -31,7 +31,7 @@ const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerH
     new THREE.SphereGeometry(600, 32, 16),
     new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { top: { value: new THREE.Color('#5fb4ff') }, mid: { value: new THREE.Color('#b9dcff') }, bottom: { value: HORIZON } },
+      uniforms: { top: { value: new THREE.Color('#3b82d4') }, mid: { value: new THREE.Color('#a4cdee') }, bottom: { value: HORIZON } },
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 bottom; varying vec3 vP; void main(){ float h = vP.y; vec3 c = h > 0.0 ? mix(mid, top, smoothstep(0.0, 0.6, h)) : mix(mid, bottom, smoothstep(0.0, 0.25, -h)); gl_FragColor = vec4(c, 1.0); }',
     }),
@@ -40,7 +40,7 @@ const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerH
   scene.userData.sky = sky;
 }
 
-scene.add(new THREE.HemisphereLight('#dff1ff', '#ffb8d9', 1.1));
+scene.add(new THREE.HemisphereLight('#e2f0ff', '#8aa86a', 1.05));
 const sun = new THREE.DirectionalLight('#fff4e0', 2.4);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -477,6 +477,15 @@ function celebrate(l, inp) {
   return inp;
 }
 
+// How far a llama can go in direction (ux, uz) before running out of ground.
+function ledgeDist(b, ux, uz) {
+  for (let d = 0.3; d < 4; d += 0.3) {
+    const g = course.groundAt(b.pos.x + ux * d, b.pos.z + uz * d, b.pos.y + 0.5, 0);
+    if (!g || g.y < b.pos.y - 0.6) return d;
+  }
+  return 4;
+}
+
 function botInput(b, dt) {
   const B = b.bot;
   const path = course.path;
@@ -507,7 +516,7 @@ function botInput(b, dt) {
     if (b.support !== wp.plat && !B.crossing && !aligned) {
       hold = true;
       tx = b.support ? b.support.pos.x : b.pos.x;
-      tz = b.support && b.support.dynamic ? b.support.pos.z + 1.4 : b.pos.z;
+      tz = b.support && b.support.dynamic ? b.support.pos.z - 0.8 : b.pos.z; // wait at the back: room for a run-up
     } else if (b.support !== wp.plat) {
       B.crossing = true;
     }
@@ -521,11 +530,19 @@ function botInput(b, dt) {
   }
   let dx = tx - b.pos.x, dz = tz - b.pos.z;
   const d = Math.hypot(dx, dz);
-  let speed = hold ? clamp(d * 0.8, 0, 0.6) : B.skill;
+  let speed = hold ? clamp(d * 0.8, 0, 0.6) : B.crossing ? 1 : B.skill;
   if (B.pause > 0) { B.pause -= dt; speed = 0; }
   else if (Math.random() < dt * 0.04) B.pause = 0.3 + Math.random() * 1.2;
   if (d > 0.01) { dx /= d; dz /= d; }
   let ix = dx * speed, iz = dz * speed;
+  // Llamas take a while to stop: when waiting for a platform, ease off well before the edge.
+  if ((hold || (wp.plat && !B.crossing && b.support !== wp.plat)) && b.grounded && b.speed > 0.4) {
+    const ux = b.vel.x / b.speed, uz = b.vel.z / b.speed;
+    const room = ledgeDist(b, ux, uz);
+    const vmax = Math.sqrt(2 * 3.2 * Math.max(0, room - 0.7));
+    if (b.speed > vmax) { ix = -ux; iz = -uz; }
+    else if (ix * ux + iz * uz > 0) { const k = Math.min(1, vmax / 4.8 / Math.max(1e-3, Math.hypot(ix, iz))); ix *= k; iz *= k; }
+  }
 
   // Balance like a real llama: step toward where the head is falling.
   // On narrow beams only correct fore/aft and lean hard on staying centred.
@@ -587,16 +604,26 @@ function botInput(b, dt) {
       continue;
     }
     const ahead = o.z - b.pos.z;
-    if (ahead < -2.3 || ahead > 5) continue;
-    if (ahead < 2.4) continue; // already in its path: keep going
+    if (ahead < -2.3 || ahead > 7) continue;
+    if (ahead < 3) continue; // already committed: keep going
     // will the hammer sweep our lane while we cross its ~3m wide zone?
     let danger = false;
-    const tIn = (ahead - 2.3) / 4.5, tOut = (ahead + 2.3) / 4.5;
+    const v = 4.8 * B.skill, lag = b.speed < 1.5 ? 0.35 : 0; // a standing llama needs a moment to get going
+    const tIn = (ahead - 2.3) / v + lag, tOut = (ahead + 2.3) / v + lag;
     for (let t = tIn; t <= tOut + 0.25; t += 0.1) {
       const th = o.amp * Math.sin((course.time + t) * o.omega + o.phase);
       if (Math.abs(Math.sin(th) * o.L - b.pos.x) < 2.2) { danger = true; break; }
     }
-    if (danger && B.skill > 0.8) { inp.x = b.lean.x * 1.5; inp.z = b.lean.y * 1.5 - (ahead < 3.2 ? 0.35 : 0); inp.moveLen = Math.min(1, Math.hypot(inp.x, inp.z)); }
+    // most llamas wait their turn; the odd one just barges on through
+    if (B.hammerSeen !== o.id) { B.hammerSeen = o.id; B.willWait = Math.random() < 0.55 + B.skill * 0.45; }
+    // never stop while still standing in another hammer's swing
+    const inSwing = course.obstacles.some((h) => h.kind === 'hammer' && h !== o && Math.abs(h.z - b.pos.z) < 2.5);
+    if (danger && B.willWait && !inSwing) {
+      // pull up: brake hard (it takes a while), then just keep the head balanced
+      if (b.speed > 0.5) { inp.x = -b.vel.x / b.speed + b.lean.x; inp.z = -b.vel.z / b.speed + b.lean.y; }
+      else { inp.x = b.lean.x * 1.5; inp.z = b.lean.y * 1.5 - 0.2; }
+      inp.moveLen = Math.min(1, Math.hypot(inp.x, inp.z));
+    }
   }
   // jump the low sweeper / duck the high one
   for (const o of course.obstacles) {
