@@ -33,7 +33,7 @@ const NECK = { K: 12, C: 1.6, G: 6.6, A: 0.3, Ab: 0.6, pull: 2.6 };
 // which is how camelids actually move.
 const WALK_OFF = { LH: 0, LF: 0.25, RH: 0.5, RF: 0.75 };
 const PACE_OFF = { LH: 0, LF: 0.04, RH: 0.5, RF: 0.54 };
-// Sprinting breaks into a bouncy transverse gallop: hinds together, then fronts.
+// Pushed past top speed (bounce pads, downhill) it breaks into a transverse gallop: hinds together, then fronts.
 const GALLOP_OFF = { LH: 0, RH: 0.11, LF: 0.48, RF: 0.6 };
 
 const LEG_DEFS = [
@@ -600,6 +600,17 @@ export class Llama {
       this.ears.push({ piv, pomPiv, side: s, ax: 0, az: 0, vx: 0, vz: 0, pa: 0, pv: 0 });
     }
 
+    // cartoon sweat drops that fly off the head when it's about to topple
+    const dropG = geo('drop', () => new THREE.SphereGeometry(0.03, 8, 6).scale(1, 1.6, 1));
+    const dropM = new THREE.MeshStandardMaterial({ color: '#bfe6ff', roughness: 0.1, transparent: true, opacity: 0.9 });
+    this.mats.drop = dropM;
+    this.drops = Array.from({ length: 6 }, () => {
+      const m = new THREE.Mesh(dropG, dropM);
+      m.visible = false;
+      this.scene.add(m);
+      return { m, life: 0, v: new THREE.Vector3() };
+    });
+
     // dizzy stars (shown when toppled)
     this.stars = new THREE.Group();
     this.stars.visible = false;
@@ -768,7 +779,7 @@ export class Llama {
   }
 
   dispose() {
-    this.scene.remove(this.root, this.limbs, this.stars, this.neckTube.mesh);
+    this.scene.remove(this.root, this.limbs, this.stars, this.neckTube.mesh, ...this.drops.map((d) => d.m));
   }
 
   // -------------------------------------------------------------------------
@@ -1235,7 +1246,7 @@ export class Llama {
 
     // jaw chews side to side when idle, gapes when toppled
     this.chew += dt * (this.speed < 0.5 ? 3.2 : 0.8);
-    const panic = this.state === 'normal' ? smoothstep((this.balance - 0.55) / 0.35) : 0;
+    const panic = this.state === 'normal' ? smoothstep((this.balance - 0.45) / 0.4) : 0;
     let open = this.state === 'toppled' ? 0.25 : Math.max(0, Math.sin(this.chew * 2)) * 0.06;
     open = Math.max(open, panic * 0.2, yawn * 0.42);
     this.jaw.rotation.x = damp(this.jaw.rotation.x, open, 12, dt);
@@ -1295,6 +1306,26 @@ export class Llama {
     this.neck[8].g.localToWorld(this.neckPts[1].set(0, 0, 0));
     if (this.propeller) this.propeller.rotation.y += dt * (4 + this.speed * 6);
     this.tubeThick = 1 / Math.sqrt(ns);
+
+    // sweat drops: the closer to toppling, the more fly off
+    if (this.state === 'normal' && panic > 0.05 && this.rand() < dt * panic * 18) {
+      const d = this.drops.find((x) => x.life <= 0);
+      if (d) {
+        const a = this.rand() * Math.PI * 2;
+        d.life = 0.6;
+        d.m.position.copy(this.headPos).add(_v1.set(Math.cos(a) * 0.12, 0.12, Math.sin(a) * 0.12));
+        d.v.set(Math.cos(a) * 1.4, 2.2 + this.rand(), Math.sin(a) * 1.4);
+        d.m.visible = true;
+      }
+    }
+    for (const d of this.drops) {
+      if (d.life <= 0) continue;
+      d.life -= dt;
+      d.v.y -= 9 * dt;
+      d.m.position.addScaledVector(d.v, dt);
+      d.m.scale.setScalar(Math.max(0.01, Math.min(1, d.life * 3)));
+      if (d.life <= 0) d.m.visible = false;
+    }
 
     // dizzy stars
     this.stars.visible = this.state !== 'normal' && T > 0.4;

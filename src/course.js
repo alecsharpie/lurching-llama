@@ -33,21 +33,7 @@ function checkerTex(c1, c2, n = 8) {
   return t;
 }
 
-function wedgeTex(c1, c2, n = 12) {
-  return canvasTexture(512, 512, (ctx, w, h) => {
-    ctx.fillStyle = c2; ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < n; i++) {
-      ctx.fillStyle = i % 2 ? c1 : c2;
-      ctx.beginPath(); ctx.moveTo(w / 2, h / 2);
-      ctx.arc(w / 2, h / 2, w / 2, (i / n) * Math.PI * 2, ((i + 1) / n) * Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.arc(w / 2, h / 2, w * 0.08, 0, Math.PI * 2); ctx.fill();
-  });
-}
-
-// Tileable rippling normal map for the goo sea (sum of periodic sines).
+// Tileable rippling normal map for the lake (sum of periodic sines).
 function gooNormalMap() {
   const N = 128;
   const h = (x, y) => {
@@ -68,14 +54,6 @@ function gooNormalMap() {
     ctx.putImageData(img, 0, 0);
   });
   t.colorSpace = THREE.NoColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  return t;
-}
-
-function stripeTex(c1, c2, n = 6) {
-  const t = canvasTexture(64, 256, (ctx, w, h) => {
-    for (let i = 0; i < n; i++) { ctx.fillStyle = i % 2 ? c1 : c2; ctx.fillRect(0, (i / n) * h, w, h / n); }
-  });
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 }
@@ -517,50 +495,49 @@ export class Course {
   // -------------------------------------------------------------------------
 
   buildGauntlet() {
-    const PINK = '#ff7eb6', PURPLE = '#9b7bff', TEAL = '#3fd6c6', YELLOW = '#ffd23f', ORANGE = '#ff9f43', BLUE = '#4fa8ff';
 
     // A: start
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 0], hx: 12, hy: 0.6, hz: 9, color: PURPLE, color2: '#b9a6ff' });
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 13], hx: 3.5, hy: 0.6, hz: 4.6, color: PINK, color2: '#ffb3d4' });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 0], hx: 12, hy: 0.6, hz: 9 });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 13], hx: 3.5, hy: 0.6, hz: 4.6 });
     // B: sweeper disk
-    this.addPlatform({ type: 'cyl', pos: [0, -0.6, 29], r: 12, hy: 0.6, color: TEAL, side: '#2bb3a5' });
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 45], hx: 3.5, hy: 0.6, hz: 4.6, color: PINK, color2: '#ffb3d4' });
+    this.addPlatform({ type: 'cyl', pos: [0, -0.6, 29], r: 12, hy: 0.6 });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 45], hx: 3.5, hy: 0.6, hz: 4.6 });
     // D: sliding platforms over the void
     this.slider = [];
     [52.5, 59.5, 66.5, 73.5].forEach((z, i) => {
       const ph = i * 1.9;
       this.slider.push(this.addPlatform({
-        type: 'box', pos: [0, -0.4, z], hx: 2.4, hy: 0.4, hz: 2.75, color: YELLOW, color2: '#fff1a8',
+        type: 'box', pos: [0, -0.4, z], hx: 2.4, hy: 0.4, hz: 2.75,
         motion: (t, p) => { p.pos.x = Math.sin(t * 0.7 + ph) * 4; },
       }));
     });
     // E: landing
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 83], hx: 5, hy: 0.6, hz: 5.5, color: BLUE, color2: '#a9d4ff' });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 83], hx: 5, hy: 0.6, hz: 5.5 });
     // F: hay-bale hill
-    this.ramp = this.addPlatform({ type: 'ramp', cx: 0, w: 9, z0: 88.5, z1: 118, y0: 0, y1: 6, color: ORANGE, color2: '#ffd1a3' });
+    this.ramp = this.addPlatform({ type: 'ramp', cx: 0, w: 9, z0: 88.5, z1: 118, y0: 0, y1: 6 });
     // G
-    this.addPlatform({ type: 'box', pos: [0, 5.4, 123], hx: 5, hy: 0.6, hz: 5, color: PURPLE, color2: '#b9a6ff' });
+    this.addPlatform({ type: 'box', pos: [0, 5.4, 123], hx: 5, hy: 0.6, hz: 5 });
     // H: windy balance beams
-    this.addPlatform({ type: 'box', pos: [0, 5.6, 136], hx: 1.0, hy: 0.4, hz: 8, color: PINK, color2: '#ffb3d4' });
-    this.addPlatform({ type: 'cyl', pos: [0, 5.6, 146], r: 2.3, hy: 0.4, color: YELLOW });
-    this.addPlatform({ type: 'box', pos: [0, 5.6, 156], hx: 1.0, hy: 0.4, hz: 8, color: PINK, color2: '#ffb3d4' });
+    this.addPlatform({ type: 'box', pos: [0, 5.6, 136], hx: 1.0, hy: 0.4, hz: 8 });
+    this.addPlatform({ type: 'cyl', pos: [0, 5.6, 146], r: 2.3, hy: 0.4 });
+    this.addPlatform({ type: 'box', pos: [0, 5.6, 156], hx: 1.0, hy: 0.4, hz: 8 });
     // I
-    this.addPlatform({ type: 'box', pos: [0, 5.4, 169], hx: 5, hy: 0.6, hz: 5, color: TEAL, color2: '#a6f0e8' });
+    this.addPlatform({ type: 'box', pos: [0, 5.4, 169], hx: 5, hy: 0.6, hz: 5 });
     // J: hammer walk
-    this.addPlatform({ type: 'box', pos: [0, 5.6, 189], hx: 3, hy: 0.4, hz: 15, color: BLUE, color2: '#a9d4ff' });
+    this.addPlatform({ type: 'box', pos: [0, 5.6, 189], hx: 3, hy: 0.4, hz: 15 });
     // K: spinning disks
     [[209.5, 0.6], [219, -0.8], [228.5, 1.0]].forEach(([z, w], i) => {
       this.addPlatform({
-        type: 'cyl', pos: [0, 5.4, z], r: 5, hy: 0.6, color: i % 2 ? ORANGE : PINK,
+        type: 'cyl', pos: [0, 5.4, z], r: 5, hy: 0.6,
         motion: (t, p) => { p.yaw = t * w; },
       });
     });
     // L: teeter-totters
-    this.addPlatform({ type: 'box', pos: [0, 5.4, 236], hx: 4, hy: 0.6, hz: 2.5, color: PURPLE, color2: '#b9a6ff' });
+    this.addPlatform({ type: 'box', pos: [0, 5.4, 236], hx: 4, hy: 0.6, hz: 2.5 });
     this.seesaws = [244, 259].map((z) => this.addSeesaw(z));
-    this.addPlatform({ type: 'cyl', pos: [0, 5.4, 251.5], r: 2.2, hy: 0.6, color: TEAL });
+    this.addPlatform({ type: 'cyl', pos: [0, 5.4, 251.5], r: 2.2, hy: 0.6 });
     // M: finish
-    this.addPlatform({ type: 'box', pos: [0, 5.4, 275], hx: 8, hy: 0.6, hz: 10.5, color: YELLOW, color2: '#fff1a8' });
+    this.addPlatform({ type: 'box', pos: [0, 5.4, 275], hx: 8, hy: 0.6, hz: 10.5 });
     this.finishZ = 274;
     this.finishY = 6;
 
@@ -571,8 +548,8 @@ export class Course {
     this.buildWind();
     this.heightFn = (z) => (z < this.ramp.z0 ? 0 : z > this.ramp.z1 ? 6 : this.ramp.topAt(0, z, 0));
     this.hints = [
-      { z: 10, text: 'Pink bar: <b>JUMP</b> it (Space) · Purple bar: <b>DUCK</b> (hold C)' },
-      { z: 46, text: 'Ride the sliders, jump the gaps. Momentum carries over!' },
+      { z: 10, text: 'Red bar: <b>JUMP</b> it (Space) · Blue bar: <b>DUCK</b> (hold C)' },
+      { z: 46, text: 'Ride the rafts, jump the gaps. Don\'t overshoot: you stop slowly!' },
       { z: 86, text: 'Hay bales incoming! Weave up the hill' },
       { z: 121, text: 'Bounce pads launch you onto the beam. Risky shortcut!' },
       { z: 130, text: 'Gusty! Wind shoves your head. Step <b>toward</b> the lean to recover' },
@@ -603,36 +580,35 @@ export class Course {
   }
 
   buildRumble() {
-    const PINK = '#ff7eb6', PURPLE = '#9b7bff', TEAL = '#3fd6c6', YELLOW = '#ffd23f', ORANGE = '#ff9f43', BLUE = '#4fa8ff';
     // start
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 0], hx: 12, hy: 0.6, hz: 9, color: TEAL, color2: '#a6f0e8' });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 0], hx: 12, hy: 0.6, hz: 9 });
     // conveyor belt running backwards, with sliding pushers
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 21], hx: 3.5, hy: 0.6, hz: 12, color: PINK, color2: '#ffb3d4', belt: -2.2 });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 21], hx: 3.5, hy: 0.6, hz: 12, belt: -2.2 });
     [[15, 0], [22, 2.1], [29, 4.2]].forEach(([z, ph]) => this.addPlatform({
       type: 'box', pos: [0, 0.9, z], hx: 1.1, hy: 0.9, hz: 0.7, look: 'hay',
       motion: (t, p) => { p.pos.x = Math.sin(t * 1.25 + ph) * 2.6; },
     }));
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 36], hx: 3.5, hy: 0.6, hz: 3, color: BLUE, color2: '#a9d4ff' });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 36], hx: 3.5, hy: 0.6, hz: 3 });
     // rolling logs: a treadmill of big candy-striped rollers
     for (let i = 0; i < 6; i++) this.addLog(40.2 + i * 3.2, i);
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 62.5], hx: 4, hy: 0.6, hz: 5, color: YELLOW, color2: '#fff1a8' });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 62.5], hx: 4, hy: 0.6, hz: 5 });
     // narrow bridge, tilting disc, narrow bridge
-    this.addPlatform({ type: 'box', pos: [0, -0.4, 69.5], hx: 1.2, hy: 0.4, hz: 2, color: PINK, color2: '#ffb3d4' });
+    this.addPlatform({ type: 'box', pos: [0, -0.4, 69.5], hx: 1.2, hy: 0.4, hz: 2 });
     this.addTilt(78);
-    this.addPlatform({ type: 'box', pos: [0, -0.4, 86.5], hx: 1.2, hy: 0.4, hz: 2, color: PINK, color2: '#ffb3d4' });
+    this.addPlatform({ type: 'box', pos: [0, -0.4, 86.5], hx: 1.2, hy: 0.4, hz: 2 });
     // elevators bobbing up toward the plateau
     this.elevators = [0.6, 1.9, 3.2, 4.5].map((top, i) => this.addPlatform({
-      type: 'box', pos: [0, top - 0.4, 90.9 + i * 5.2], hx: 2.2, hy: 0.4, hz: 2.2, color: ORANGE, color2: '#ffd1a3',
+      type: 'box', pos: [0, top - 0.4, 90.9 + i * 5.2], hx: 2.2, hy: 0.4, hz: 2.2,
       motion: (t, p) => { p.pos.y = top - 0.4 + Math.sin(t * 1.0 + i * 1.6) * 1.0; },
     }));
-    this.addPlatform({ type: 'box', pos: [0, 5.4, 114.5], hx: 5, hy: 0.6, hz: 5, color: PURPLE, color2: '#b9a6ff' });
+    this.addPlatform({ type: 'box', pos: [0, 5.4, 114.5], hx: 5, hy: 0.6, hz: 5 });
     // bounce pads up to the top deck
-    this.buildBouncePads([[-2.6, 6, 117.5], [0, 6, 117.5], [2.6, 6, 117.5]], { aim: 0.15, minVz: 4 });
-    this.addPlatform({ type: 'box', pos: [0, 8.4, 130], hx: 5, hy: 0.6, hz: 7.5, color: BLUE, color2: '#a9d4ff' });
+    this.buildBouncePads([[-2.6, 6, 117.5], [0, 6, 117.5], [2.6, 6, 117.5]], { aim: 0.15, minVz: 6 });
+    this.addPlatform({ type: 'box', pos: [0, 8.4, 130], hx: 5, hy: 0.6, hz: 7.5 });
     // sweeper finale
-    this.addPlatform({ type: 'cyl', pos: [0, 8.4, 148.5], r: 11, hy: 0.6, color: TEAL, side: '#2bb3a5' });
+    this.addPlatform({ type: 'cyl', pos: [0, 8.4, 148.5], r: 11, hy: 0.6 });
     this.buildSweepers(new THREE.Vector3(0, 9, 148.5), 10.6, 10.2);
-    this.addPlatform({ type: 'box', pos: [0, 8.4, 170], hx: 8, hy: 0.6, hz: 10.5, color: YELLOW, color2: '#fff1a8' });
+    this.addPlatform({ type: 'box', pos: [0, 8.4, 170], hx: 8, hy: 0.6, hz: 10.5 });
     this.finishZ = 169.5;
     this.finishY = 9;
 
@@ -655,17 +631,16 @@ export class Course {
       { z: 66, text: 'The disc tilts toward weight, and your heavy head counts!' },
       { z: 86, text: 'Ride the elevators up. Jump when the next one is level' },
       { z: 111, text: 'Hit a bounce pad with some speed to reach the top deck' },
-      { z: 136, text: 'Jump the pink bar, duck the purple one!' },
+      { z: 136, text: 'Jump the red bar, duck the blue one!' },
     ];
   }
 
   // A course about the neck: bars at head height you must duck, low hurdles you must
   // jump, stepping stones that sink under you, and pendulums that swing at head height.
   buildDuck() {
-    const PINK = '#ff7eb6', PURPLE = '#9b7bff', TEAL = '#3fd6c6', YELLOW = '#ffd23f', ORANGE = '#ff9f43', BLUE = '#4fa8ff';
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 0], hx: 12, hy: 0.6, hz: 9, color: YELLOW, color2: '#fff1a8' });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 0], hx: 12, hy: 0.6, hz: 9 });
     // the duck-and-jump corridor
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 25.6], hx: 3, hy: 0.6, hz: 16.6, color: PURPLE, color2: '#b9a6ff' });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 25.6], hx: 3, hy: 0.6, hz: 16.6 });
     [[15, 'duck'], [21, 'hurdle'], [27, 'duck'], [31, 'hurdle'], [36, 'duck']].forEach(([z, kind]) => this.addBar(z, 0, kind, 3));
     // sinking stepping stones, three lanes wide so the pack spreads out
     const rows = Array.from({ length: 9 }, (_, i) => 44.5 + i * 4.3);
@@ -679,16 +654,16 @@ export class Course {
       p.sink = 0;
       this.sinkers.push(p);
     }));
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 85.5], hx: 5, hy: 0.6, hz: 5, color: BLUE, color2: '#a9d4ff' });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 85.5], hx: 5, hy: 0.6, hz: 5 });
     // ramp up with head-height pendulums
-    this.ramp = this.addPlatform({ type: 'ramp', cx: 0, w: 7, z0: 90.5, z1: 114, y0: 0, y1: 5, color: PINK, color2: '#ffb3d4' });
+    this.ramp = this.addPlatform({ type: 'ramp', cx: 0, w: 7, z0: 90.5, z1: 114, y0: 0, y1: 5 });
     const rampY = (z) => (5 * (z - 90.5)) / 23.5;
     this.buildHammers([96, 103, 110].map((z) => [z, rampY(z)]), 2.25, true);
-    this.addPlatform({ type: 'box', pos: [0, 4.4, 118], hx: 5, hy: 0.6, hz: 4, color: ORANGE, color2: '#ffd1a3' });
+    this.addPlatform({ type: 'box', pos: [0, 4.4, 118], hx: 5, hy: 0.6, hz: 4 });
     // last gauntlet: narrow catwalk with alternating bars, then the finish
-    this.addPlatform({ type: 'box', pos: [0, 4.6, 131], hx: 1.6, hy: 0.4, hz: 9, color: PURPLE, color2: '#b9a6ff' });
+    this.addPlatform({ type: 'box', pos: [0, 4.6, 131], hx: 1.6, hy: 0.4, hz: 9 });
     [[125, 'duck'], [129, 'hurdle'], [133, 'duck'], [137, 'duck']].forEach(([z, kind]) => this.addBar(z, 5, kind, 1.6));
-    this.addPlatform({ type: 'box', pos: [0, 4.4, 150.5], hx: 8, hy: 0.6, hz: 10.5, color: YELLOW, color2: '#fff1a8' });
+    this.addPlatform({ type: 'box', pos: [0, 4.4, 150.5], hx: 8, hy: 0.6, hz: 10.5 });
     this.finishZ = 149;
     this.finishY = 5;
 
@@ -705,7 +680,7 @@ export class Course {
       P(0, 91, 2), P(0, 113.5, 2), P(0, 121.5, 0.5), P(0, 140.5, 0.2), P(0, 158, 4),
     ];
     this.hints = [
-      { z: 8, text: 'Purple bars: <b>DUCK</b> (hold C) · Low pink bars: <b>JUMP</b>' },
+      { z: 8, text: 'Blue bars: <b>DUCK</b> (hold C) · Low red bars: <b>JUMP</b>' },
       { z: 41, text: 'Stepping stones sink while you stand on them. Keep hopping!' },
       { z: 88, text: 'The pendulums swing at head height. <b>Duck</b> and they pass over you' },
       { z: 120, text: 'Last stretch! Duck, jump, duck… and wobble home' },
@@ -972,30 +947,30 @@ export class Course {
       g.position.set(0, y, z);
       const bark = std('#ffffff', { map: texCopy(barkTex(), 1, 3), roughness: 1 });
       for (const s of [1, -1]) {
-        const p = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 6.4, 10), bark));
-        p.position.set(s * 6.2, 3.2, 0);
+        const p = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 8, 10), bark));
+        p.position.set(s * 6.2, 4, 0);
         g.add(p);
         this.occluders.push(p);
         const cap = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.6, 10), std('#6b4a2e')));
-        cap.position.set(s * 6.2, 6.7, 0);
+        cap.position.set(s * 6.2, 8.3, 0);
         g.add(cap);
       }
       const beam = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 13.6, 10), bark));
-      beam.rotation.z = Math.PI / 2; beam.position.y = 6.3;
+      beam.rotation.z = Math.PI / 2; beam.position.y = 7.9;
       g.add(beam);
       const sign = textTex(text, c1, '#fff6e0');
       const banner = shadowed(new THREE.Mesh(new RoundedBoxGeometry(11, 1.5, 0.25, 2, 0.08), [
         std('#6b4a2e'), std('#6b4a2e'), std('#6b4a2e'), std('#6b4a2e'), std('#ffffff', { map: sign }), std('#ffffff', { map: sign }),
       ]));
-      banner.position.y = 5.2;
+      banner.position.y = 6.85;
       banner.rotation.y = Math.PI; // readable when approaching from -z
       g.add(banner);
       for (const s of [1, -1]) {
         const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.7, 6), std('#c9a66b'));
-        rope.position.set(s * 4.5, 5.95, 0);
+        rope.position.set(s * 4.5, 7.6, 0);
         g.add(rope);
       }
-      bunting(g, new THREE.Vector3(-6.2, 6.1, 0.45), new THREE.Vector3(6.2, 6.1, 0.45), 0.9, 16);
+      bunting(g, new THREE.Vector3(-6.2, 7.7, 0.45), new THREE.Vector3(6.2, 7.7, 0.45), 0.9, 16);
       S.add(g);
       return g;
     };
@@ -1289,4 +1264,3 @@ export class Course {
   }
 }
 
-const YELLOWC = '#ffd23f';

@@ -72,10 +72,10 @@ function hookEvents(ll) {
     if (l.isPlayer) { sfx.land(v); camBump = Math.min(0.35, v * 0.025); }
   });
   ll.on('onJump', (l) => { if (l.isPlayer) sfx.jump(); });
-  ll.on('onBounce', (l) => { if (l.isPlayer || l.pos.distanceTo(player.pos) < 10) sfx.boing(); if (l.isPlayer) toast('BOING!', '#ffd23f'); });
+  ll.on('onBounce', (l) => { if (l.isPlayer || l.pos.distanceTo(player.pos) < 10) sfx.boing(); if (l.isPlayer) toast('BOING!', '#f2c14e'); });
   ll.on('onTopple', (l) => {
     if (l.isPlayer && !game.mashHinted) { game.mashHinted = true; setTimeout(() => showHint('Knocked over? <b>Mash Space</b> to get up faster!'), 600); }
-    if (l.isPlayer) { sfx.bleat(1); toast(['WHOOPS!', 'TOPPLED!', 'NECK FAIL!', 'TIMBERRR!'][Math.floor(Math.random() * 4)], '#ff4f8b'); shake = 0.5; }
+    if (l.isPlayer) { sfx.bleat(1); toast(['WHOOPS!', 'TOPPLED!', 'NECK FAIL!', 'TIMBERRR!'][Math.floor(Math.random() * 4)], '#e4572e'); shake = 0.5; }
     else if (l.pos.distanceTo(player.pos) < 14) sfx.bleat(0.85 + Math.random() * 0.4);
   });
   ll.on('onHit', (l, sev) => {
@@ -144,7 +144,7 @@ function updateGhost(dt) {
 }
 
 // "YOU" marker over the player
-const marker = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.32, 16), new THREE.MeshBasicMaterial({ color: '#ffd23f' }));
+const marker = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.32, 16), new THREE.MeshBasicMaterial({ color: '#f2c14e' }));
 marker.rotation.x = Math.PI;
 scene.add(marker);
 
@@ -312,7 +312,7 @@ addEventListener('keydown', (e) => {
   else if (e.code === 'Enter' && game.state === 'results') $('again').click();
   if (e.code === 'KeyR' && game.state === 'racing' && !player.finished) respawnAtCheckpoint(player);
   if (e.code === 'KeyP' && (game.state === 'racing' || game.state === 'countdown') && !player.finished) setPaused(true);
-  if (e.code === 'KeyM') { sfx.setMuted(!sfx.muted); toast(sfx.muted ? 'SOUND OFF' : 'SOUND ON', '#5b3cc4'); }
+  if (e.code === 'KeyM') { sfx.setMuted(!sfx.muted); toast(sfx.muted ? 'SOUND OFF' : 'SOUND ON', '#2f5d8a'); }
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
 // browsers only allow audio after a real gesture (a gamepad press doesn't count), so wake it on any
@@ -439,7 +439,7 @@ function pollPad(dt) {
   }
   pad.prev = gp.buttons.map((x) => x.pressed);
 }
-addEventListener('gamepadconnected', () => toast('CONTROLLER READY', '#3fd6c6'));
+addEventListener('gamepadconnected', () => toast('CONTROLLER READY', '#5a9e4b'));
 
 function playerInput() {
   let ix = touch.x + pad.x, iz = -touch.y - pad.y;
@@ -655,7 +655,7 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function ordinal(n) { return n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : (n % 10 < 4 ? n % 10 : 0)] || 'th'); }
 
-function toast(text, color = '#ff4f8b') {
+function toast(text, color = '#e4572e') {
   const el = $('toast');
   el.textContent = text;
   el.style.color = color;
@@ -829,14 +829,14 @@ function finish(l) {
     const made = !show || place <= show.quota;
     if (made) { sfx.fanfare(); confetti.burst(l.pos); }
     toast(show ? (isFinal() ? (place === 1 ? 'CROWNED!' : 'TOO SLOW!') : made ? 'QUALIFIED!' : 'TOO LATE!')
-      : place === 1 ? 'WINNER!' : 'FINISHED!', '#ffd23f');
+      : place === 1 ? 'WINNER!' : 'FINISHED!', '#f2c14e');
     scheduleResults(1800);
   }
   // in a Show the round ends as soon as the qualifying spots are filled
   if (show && !game.roundOver && place >= show.quota) {
     game.roundOver = true;
     if (!player.finished) {
-      toast(isFinal() ? `${l.name.toUpperCase()} WINS!` : 'ELIMINATED!', '#ff4f8b');
+      toast(isFinal() ? `${l.name.toUpperCase()} WINS!` : 'ELIMINATED!', '#e4572e');
       sfx.bleat(0.8);
       scheduleResults(2000);
     }
@@ -961,7 +961,7 @@ const confetti = (() => {
   const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
   const mesh = new THREE.InstancedMesh(geo, mat, N);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  const cols = ['#ff4f8b', '#ffd23f', '#3fd6c6', '#5b3cc4', '#4fa8ff', '#ffffff'].map((c) => new THREE.Color(c));
+  const cols = ['#e4572e', '#f2c14e', '#5a9e4b', '#2f5d8a', '#3e7cb1', '#ffffff'].map((c) => new THREE.Color(c));
   const parts = [];
   for (let i = 0; i < N; i++) {
     parts.push({ p: new THREE.Vector3(0, -999, 0), v: new THREE.Vector3(), r: new THREE.Euler(), w: Math.random() * 10 });
@@ -1138,13 +1138,13 @@ function step(dt) {
   // checkpoints, falling, finishing
   for (const l of racers) {
     if (l.pos.y < -14) {
-      if (l.isPlayer) toast(['SPLOOSH!', 'OOPS!', 'BYE BYE!'][Math.floor(Math.random() * 3)], '#4fa8ff');
+      if (l.isPlayer) toast(['SPLOOSH!', 'OOPS!', 'BYE BYE!'][Math.floor(Math.random() * 3)], '#3e7cb1');
       respawnAtCheckpoint(l);
     }
     const cps = course.checkpoints;
     while (l.checkpoint + 1 < cps.length && l.pos.z > cps[l.checkpoint + 1].z && l.pos.y > cps[l.checkpoint + 1].spawn.y - 1.5) {
       l.checkpoint++;
-      if (l.isPlayer) { toast('CHECKPOINT!', '#3fd6c6'); sfx.boing(); }
+      if (l.isPlayer) { toast('CHECKPOINT!', '#5a9e4b'); sfx.boing(); }
     }
     if ((game.state === 'racing' || game.state === 'results') && !l.finished && l.pos.z > course.finishZ && l.pos.y > course.finishY - 2) {
       finish(l);

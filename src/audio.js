@@ -74,7 +74,6 @@ export class Sfx {
     o.start(t); lfo.start(t); o.stop(t + dur + 0.1); lfo.stop(t + dur + 0.1);
   }
 
-  spit() { this.noise(0.09, 0.25, 2600, 1.5); this.tone('sine', 900, 300, 0.08, 0.08); }
   uhoh() { this.tone('triangle', 520, 500, 0.12, 0.12); this.tone('triangle', 400, 340, 0.2, 0.12, 0.13); }
 
   // --- bouncy procedural background music --------------------------------
