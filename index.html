@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lurching Llama</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --pink: #ff4f8b; --yellow: #ffd23f; --teal: #3fd6c6; --purple: #5b3cc4; --ink: #2b1f3a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #ffd9ee; font-family: Nunito, system-ui, sans-serif; color: var(--ink); }
+    canvas#game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+    .hidden { display: none !important; }
+    h1, .big { font-family: 'Lilita One', 'Arial Black', sans-serif; font-weight: 400; letter-spacing: 0.02em; }
+
+    /* menu */
+    #menu, #results, #paused {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px;
+      background: radial-gradient(ellipse at center, rgba(255,255,255,0) 30%, rgba(91,60,196,0.35) 100%);
+    }
+    .card {
+      background: #fff; border-radius: 28px; padding: 28px 32px; max-width: 520px; width: 100%;
+      box-shadow: 0 10px 0 #e2c8ff, 0 20px 50px rgba(60,20,120,0.25);
+      text-align: center;
+    }
+    #menu { justify-content: flex-start; align-items: safe center; padding-left: max(16px, 4vw); }
+    #menu .card { max-width: 470px; margin-block: auto; }
+    @media (max-width: 800px) { #menu { justify-content: center; padding-left: 16px; } }
+    #menu, #results { overflow-y: auto; }
+    h1 { margin: 0 0 4px; font-size: 54px; line-height: 0.95; color: var(--pink); text-shadow: 0 4px 0 #ffc2d9; }
+    h1 span { color: var(--purple); text-shadow: 0 4px 0 #d6c8ff; display: block; }
+    .tag { margin: 10px 0 18px; font-size: 16px; color: #6b5a7d; text-wrap: balance; }
+    .controls { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 7px 10px; align-items: center; text-align: left; font-size: 14px; margin: 0 auto 18px; max-width: 420px; }
+    .controls kbd { text-align: center; }
+    .controls span { white-space: nowrap; }
+    kbd { font-family: inherit; font-weight: 900; background: #f4ecff; border: 2px solid #d6c8ff; border-bottom-width: 4px; border-radius: 8px; padding: 1px 7px; font-size: 13px; white-space: nowrap; }
+    button.go {
+      font-family: 'Lilita One', sans-serif; font-size: 30px; color: #fff; background: var(--pink); border: 0; border-radius: 999px;
+      padding: 12px 48px; cursor: pointer; box-shadow: 0 6px 0 #c42f66; transition: transform 0.1s;
+    }
+    button.go:hover { transform: translateY(-2px) scale(1.03); }
+    button.go:active { transform: translateY(4px); box-shadow: 0 2px 0 #c42f66; }
+
+    /* hud */
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+    #timer { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 34px; color: #fff; text-shadow: 0 3px 0 rgba(43,31,58,0.35); }
+    #place { position: absolute; top: 12px; right: 20px; font-size: 54px; color: var(--yellow); -webkit-text-stroke: 2px #b5741c; text-shadow: 0 4px 0 #b5741c; }
+    #place small { font-size: 26px; color: #fff; -webkit-text-stroke: 0; text-shadow: 0 2px 0 rgba(0,0,0,0.25); }
+    #progress { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); width: min(340px, 60vw); height: 12px; background: rgba(255,255,255,0.5); border-radius: 99px; overflow: hidden; border: 2px solid #fff; }
+    #progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--teal), var(--yellow), var(--pink)); }
+    #balwrap { position: absolute; left: 20px; bottom: 20px; text-align: center; }
+    #balwrap .lbl { font-size: 18px; color: #fff; text-shadow: 0 2px 0 rgba(43,31,58,0.4); margin-bottom: 4px; }
+    #balance { width: 130px; height: 130px; display: block; filter: drop-shadow(0 4px 0 rgba(43,31,58,0.25)); }
+    #balwrap.danger { animation: wob 0.18s infinite alternate; }
+    @keyframes wob { from { transform: rotate(-5deg) scale(1.04); } to { transform: rotate(5deg) scale(1.04); } }
+    #keys { position: absolute; right: 20px; bottom: 20px; font-size: 13px; color: #fff; text-align: right; text-shadow: 0 1px 2px rgba(0,0,0,0.4); line-height: 1.9; }
+    #keys kbd { color: var(--ink); text-shadow: none; }
+    #count { position: absolute; top: 34%; left: 0; right: 0; text-align: center; font-size: 160px; color: var(--yellow); -webkit-text-stroke: 4px #b5741c; text-shadow: 0 8px 0 #b5741c; }
+    #toast { position: absolute; top: 22%; left: 0; right: 0; text-align: center; font-size: 64px; opacity: 0; -webkit-text-stroke: 2px #fff; text-shadow: 0 5px 0 rgba(43,31,58,0.25); }
+    .pop { animation: pop 1.3s ease-out forwards; }
+    @keyframes pop { 0% { transform: scale(0.3) rotate(-8deg); opacity: 0; } 15% { transform: scale(1.15) rotate(3deg); opacity: 1; } 30% { transform: scale(1) rotate(0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-30px); } }
+    #wind { position: absolute; top: 40%; left: 0; right: 0; text-align: center; font-size: 40px; color: #fff; opacity: 0; transition: opacity 0.3s; text-shadow: 0 3px 0 rgba(79,168,255,0.8); }
+    #wind.show { opacity: 0.9; }
+    #fade { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity 0.35s; }
+    #fade.flash { opacity: 0.8; transition: none; }
+
+    /* results */
+    #results .card h1 { font-size: 46px; }
+    #res-place { font-size: 64px; color: var(--yellow); -webkit-text-stroke: 2px #b5741c; margin: 4px 0 0; }
+    #res-time { font-size: 20px; color: #6b5a7d; margin-bottom: 14px; }
+    #res-list { list-style: none; padding: 0; margin: 0 0 20px; text-align: left; font-size: 15px; }
+    #res-list li { display: flex; align-items: center; gap: 10px; padding: 5px 10px; border-radius: 10px; }
+    #res-list li:nth-child(odd) { background: #faf5ff; }
+    #res-list li.me { background: #ffe3ef; font-weight: 900; }
+    #res-list span { width: 38px; font-weight: 900; color: var(--purple); }
+    #res-list b { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.15); }
+    body.show-results #balwrap, body.show-results #keys, body.show-results #hint, body.show-results #progress, body.show-results #round { display: none !important; }
+    #intro { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 9vh; cursor: pointer; }
+    .intro-title { font-size: clamp(36px, 7vw, 76px); color: #fff; -webkit-text-stroke: 3px var(--purple); text-shadow: 0 6px 0 var(--purple); animation: pop 6s ease-out forwards; text-align: center; }
+    .intro-sub { margin-top: 10px; font-weight: 900; color: var(--purple); background: rgba(255,255,255,0.85); padding: 6px 16px; border-radius: 99px; font-size: 15px; text-align: center; }
+    .intro-skip { margin-top: 10px; color: #fff; font-size: 13px; text-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+    #fps { position: fixed; left: 8px; top: 8px; font: 700 12px Nunito, sans-serif; color: #fff; background: rgba(43,31,58,0.6); padding: 2px 8px; border-radius: 6px; pointer-events: none; }
+    #touchui { display: none; }
+    body.touch.playing #touchui { display: block; position: fixed; inset: 0; pointer-events: none; }
+    body.touch #keys { display: none; }
+    body.touch #balwrap { left: 12px; bottom: auto; top: 10px; transform: scale(0.62); transform-origin: top left; }
+    #joy { position: absolute; left: 24px; bottom: 28px; width: 150px; height: 150px; border-radius: 50%; background: rgba(255,255,255,0.35);
+      border: 3px solid rgba(255,255,255,0.8); pointer-events: auto; touch-action: none; }
+    #knob { position: absolute; left: 45px; top: 45px; width: 60px; height: 60px; border-radius: 50%; background: #fff; box-shadow: 0 4px 0 rgba(91,60,196,0.3); }
+    .tbtn { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.85); color: var(--ink); border: 0; pointer-events: auto; touch-action: none;
+      font: 400 15px 'Lilita One', sans-serif; box-shadow: 0 4px 0 rgba(91,60,196,0.3); user-select: none; -webkit-user-select: none; }
+    .tbtn.on, .tbtn:active { background: var(--yellow); }
+    #t-jump { right: 26px; bottom: 34px; width: 92px; height: 92px; font-size: 20px; background: var(--pink); color: #fff; }
+    #t-duck { right: 132px; bottom: 26px; width: 64px; height: 64px; }
+    #t-spit { right: 30px; bottom: 142px; width: 64px; height: 64px; }
+    #t-sprint { right: 122px; bottom: 112px; width: 64px; height: 64px; }
+    #tags { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+    .tag-name { position: absolute; left: 0; top: 0; padding: 2px 9px; border-radius: 99px; background: rgba(255,255,255,0.88); color: var(--ink);
+      font: 900 12px Nunito, sans-serif; white-space: nowrap; border-bottom: 3px solid var(--c); transform-origin: 50% 100%; }
+    .tag-name.ghost-tag { background: rgba(255,255,255,0.5); color: #5b3cc4; font-style: italic; border-bottom-style: dashed; }
+    body.touch .tag-name { font-size: 10px; padding: 1px 6px; }
+    #hint { position: absolute; bottom: 92px; left: 50%; transform: translate(-50%, 20px); max-width: min(620px, 86vw); text-align: center;
+      background: rgba(255,255,255,0.92); color: var(--ink); padding: 10px 20px; border-radius: 16px; font-size: 17px; opacity: 0;
+      transition: opacity 0.35s, transform 0.35s; box-shadow: 0 5px 0 rgba(91,60,196,0.25); }
+    #hint.show { opacity: 1; transform: translate(-50%, 0); }
+    #hint b { color: var(--pink); }
+    #vignette { position: fixed; inset: 0; pointer-events: none; opacity: 0;
+      background: radial-gradient(ellipse at center, rgba(255,40,100,0) 55%, rgba(255,40,100,0.55) 100%); }
+    .pb { color: var(--pink); }
+    .pickers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 8px; margin: 0 0 12px; }
+    .style-pick { display: flex; align-items: center; justify-content: space-between; gap: 4px; background: #faf6ff; border-radius: 16px; padding: 6px; min-width: 0; }
+    .style-pick div { min-width: 0; flex: 1; }
+    .style-pick small { display: block; font-size: 10px; letter-spacing: 0.12em; color: #8a7a9b; font-weight: 900; }
+    .style-pick b { display: block; font-family: 'Lilita One', sans-serif; font-weight: 400; font-size: 16px; line-height: 1.15; color: var(--purple); }
+    .style-pick button { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 0; background: #f4ecff; color: var(--purple); font-size: 16px;
+      cursor: pointer; box-shadow: 0 3px 0 #d6c8ff; }
+    .style-pick button:hover { background: #e9dcff; }
+    #menu-stats { font-size: 12px; font-weight: 900; color: #8a7a9b; margin: -8px 0 12px; min-height: 0; }
+    #menu-best { font-weight: 900; color: var(--purple); margin: -8px 0 14px; min-height: 1em; }
+    .watch { margin-top: 12px; background: none; border: 0; color: #8a7a9b; font: 900 13px Nunito, sans-serif; cursor: pointer; text-decoration: underline; }
+    #results.watching { background: none; pointer-events: none; }
+    #results.watching .card { display: none; }
+    #show-card { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); }
+    .res-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    #menu button.go { font-size: 24px; padding: 10px 26px; }
+    button.go.show { background: var(--purple); box-shadow: 0 6px 0 #3a2390; }
+    #round { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); font: 900 13px Nunito, sans-serif; letter-spacing: 0.08em;
+      color: #fff; background: rgba(91,60,196,0.75); padding: 3px 12px; border-radius: 99px; white-space: nowrap; }
+    button.go.alt { background: #f4ecff; color: var(--purple); box-shadow: 0 6px 0 #d6c8ff; }
+    #res-course { font-weight: 900; color: #8a7a9b; font-size: 13px; letter-spacing: 0.08em; }
+    #res-list em { margin-left: auto; font-style: normal; color: #8a7a9b; }
+    @media (max-height: 560px) {
+      #menu, #results { align-items: flex-start; }
+      .card { padding: 14px 20px; border-radius: 20px; }
+      h1 { font-size: 34px; }
+      .tag { margin: 4px 0 8px; font-size: 13px; }
+      .controls, .tag.tip, .show-note { display: none; }
+      .pickers { gap: 6px; margin-bottom: 8px; }
+      .style-pick { padding: 3px; }
+      .style-pick b { font-size: 14px; }
+      .style-pick button { width: 28px; height: 28px; }
+      #menu button.go { font-size: 20px; padding: 7px 20px; }
+      button.go { font-size: 24px; padding: 8px 36px; }
+      #results .card h1 { font-size: 30px; }
+      #res-place { font-size: 40px; }
+      #res-list { font-size: 13px; margin-bottom: 10px; }
+      #res-list li { padding: 2px 8px; }
+    }
+    body.touch .controls, body.touch .tag.tip { display: none; }
+    @media (max-width: 600px) {
+      #timer { font-size: 24px; top: 10px; }
+      #place { font-size: 34px; top: 6px; right: 12px; }
+      #place small { font-size: 18px; }
+      #progress { top: 44px; width: 46vw; }
+      #round { top: 62px; font-size: 11px; }
+      #toast { font-size: 44px; }
+      #count { font-size: 110px; }
+      .pickers { grid-template-columns: 1fr; }
+    }
+    @keyframes fade { 0% { opacity: 0; } 12% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) {
+      .pop, .intro-title { animation-name: fade !important; }
+      #balwrap.danger { animation: none; }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="menu">
+    <div class="card">
+      <h1>LURCHING <span>LLAMA</span></h1>
+      <p class="tag">Way too much neck. Keep your head over your hooves and wobble to the finish!</p>
+      <div class="controls">
+        <kbd>W A S D</kbd><span>Move</span>
+        <kbd>Space</kbd><span>Jump</span>
+        <kbd>Shift</kbd><span>Sprint (wobblier!)</span>
+        <kbd>C</kbd><span>Duck under bars</span>
+        <kbd>F</kbd><span>Spit</span>
+        <kbd>B</kbd><span>Bleat</span>
+        <kbd>Mouse</kbd><span>Look around</span>
+        <kbd>R</kbd><span>Respawn</span>
+      </div>
+      <p class="tag tip" style="margin-top:-6px;font-size:14px">Balance tip: if your neck is tipping, <b>move toward the lean</b> to get back under it.</p>
+      <div class="pickers">
+        <div class="style-pick">
+          <button id="course-prev" aria-label="Previous course">◀</button>
+          <div><small>COURSE</small><b id="course-name">The Wobbly Gauntlet</b></div>
+          <button id="course-next" aria-label="Next course">▶</button>
+        </div>
+        <div class="style-pick">
+          <button id="diff-prev" aria-label="Easier">◀</button>
+          <div><small>NECK</small><b id="diff-name">Wobbly</b></div>
+          <button id="diff-next" aria-label="Harder">▶</button>
+        </div>
+        <div class="style-pick">
+          <button id="style-prev" aria-label="Previous style">◀</button>
+          <div><small>COAT</small><b id="style-name">Classic Cream</b></div>
+          <button id="style-next" aria-label="Next style">▶</button>
+        </div>
+        <div class="style-pick">
+          <button id="hat-prev" aria-label="Previous hat">◀</button>
+          <div><small>HAT</small><b id="hat-name">No Hat</b></div>
+          <button id="hat-next" aria-label="Next hat">▶</button>
+        </div>
+      </div>
+      <div id="menu-best"></div>
+      <div id="menu-stats"></div>
+      <div class="res-buttons">
+        <button class="go" id="play">QUICK RACE</button>
+        <button class="go show" id="play-show">PLAY SHOW</button>
+      </div>
+      <p class="tag show-note" style="font-size:12px;margin:10px 0 0">A Show is three rounds: 8 → 5 → 3 llamas, then a winner-takes-the-crown final.</p>
+    </div>
+  </div>
+
+  <div id="vignette"></div>
+  <div id="tags"></div>
+  <div id="hud" class="hidden">
+    <div id="hint"></div>
+    <div id="timer" class="big">0:00.00</div>
+    <div id="progress"><div id="progress-fill"></div></div>
+    <div id="round" class="hidden"></div>
+    <div id="place" class="big">1st</div>
+    <div id="count" class="big"></div>
+    <div id="toast" class="big"></div>
+    <div id="wind" class="big">WIND</div>
+    <div id="balwrap"><div class="lbl big">BALANCE</div><canvas id="balance" width="260" height="260"></canvas></div>
+    <div id="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> sprint<br/><kbd>C</kbd> duck · <kbd>F</kbd> spit · <kbd>R</kbd> respawn · <kbd>M</kbd> mute · <kbd>P</kbd> pause</div>
+  </div>
+
+  <div id="touchui">
+    <div id="joy"><div id="knob"></div></div>
+    <button class="tbtn" id="t-jump">JUMP</button>
+    <button class="tbtn" id="t-duck">DUCK</button>
+    <button class="tbtn" id="t-spit">SPIT</button>
+    <button class="tbtn" id="t-sprint">RUN</button>
+  </div>
+
+  <div id="paused" class="hidden">
+    <div class="card"><h1>PAUSED</h1><p class="tag">Your llama is having a little sit-down.</p><button class="go">RESUME</button>
+      <p class="tag" style="font-size:13px;margin:12px 0 0">P to pause · M to mute</p></div>
+  </div>
+
+  <div id="intro" class="hidden">
+    <div class="intro-title big" id="intro-title">THE WOBBLY GAUNTLET</div>
+    <div class="intro-sub" id="intro-sub"></div>
+    <div class="intro-skip">click or press Space to skip</div>
+  </div>
+
+  <div id="results" class="hidden">
+    <div class="card">
+      <div id="res-course"></div>
+      <h1 id="res-title">FINISHED!</h1>
+      <div id="res-place" class="big">1st</div>
+      <div id="res-time"></div>
+      <ol id="res-list"></ol>
+      <div class="res-buttons">
+        <button class="go" id="again">RACE AGAIN</button>
+        <button class="go alt" id="to-menu">MENU</button>
+      </div>
+      <button class="watch" id="watch">Hide this card and watch the race ▸</button>
+    </div>
+  </div>
+  <button class="go" id="show-card" hidden>SHOW RESULTS</button>
+  <div id="fade"></div>
+  <div id="fps" class="hidden"></div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
