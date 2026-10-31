@@ -55,8 +55,9 @@ you'd balance a broom on your hand. Tip too far and over you go.
 the lake → hay-bale hill → toadstool bounce pads and windy balance beams by the windmills → swinging hay-bale hammers → spinning
 millstones → teeter-totters that tip under your weight (your heavy head counts!) → finish.
 
-**Log Roll Rumble.** A conveyor belt with sliding pushers → a treadmill of giant rolling logs →
-a tilting disc on a ball joint → bobbing elevators up to a plateau → bounce pads to the top deck
+**Log Roll Rumble.** A conveyor belt with sliding hay-bale pushers → a giant log lying along the
+track that spins one way then the other, trying to roll you off → a skinny wavy plank → a
+tilting table on a boulder that tips hard sideways under your weight → bobbing elevators up to a plateau → bounce pads to the top deck
 → sweeper finale → finish.
 
 **Duck Duck Llama.** A course about the neck: a corridor of head-height bars to duck (hold C)

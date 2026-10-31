@@ -213,30 +213,60 @@ class Seesaw {
 
 // A big spinning log lying across the course. Its top rolls back toward you like a
 // treadmill, and the curved surface rocks your body as you cross.
-class Log {
+// A big log lying along the track, spinning about its length. Its surface throws
+// you sideways (and the spin keeps reversing), and anything off the crown rolls off.
+class SpinLog {
   constructor(o) {
     Object.assign(this, o);
     this.pos = new THREE.Vector3(...o.pos);
     this.dynamic = true;
     this.dYaw = 0;
-    this.vel = new THREE.Vector3(0, 0, -o.speed);
-    this.type = 'log';
+    this.vel = new THREE.Vector3();
+    this.type = 'spinlog';
     this.dt = 0;
+    this.surf = 0; // sideways surface speed at the crown
   }
 
   update(t, dt) {
     this.dt = dt;
-    this.mesh.rotation.x -= (this.speed / this.r) * dt;
+    this.surf = this.spin * Math.sin(t * this.freq + this.phase);
+    this.vel.set(this.surf, 0, 0);
+    this.mesh.children[0].rotation.y -= (this.surf / this.r) * dt;
   }
 
   topAt(x, z, m) {
-    const dz = Math.abs(z - this.pos.z);
-    if (Math.abs(x - this.pos.x) > this.hw + m || dz > this.r + m) return null;
-    const d = Math.min(dz, this.r);
+    const dx = x - this.pos.x;
+    if (Math.abs(z - this.pos.z) > this.hl + m || Math.abs(dx) > this.r * 0.92 + m) return null;
+    const d = Math.min(Math.abs(dx), this.r * 0.92);
     return this.pos.y + Math.sqrt(this.r * this.r - d * d);
   }
 
-  carry(v) { v.z -= this.speed * this.dt; }
+  carry(v) { v.x += this.surf * this.dt; }
+  pushOut() {}
+}
+
+// A skinny plank that snakes left and right (and gently up and down) over the lake.
+class WavyPlank {
+  constructor(o) {
+    Object.assign(this, o);
+    this.pos = new THREE.Vector3(0, o.y, (o.z0 + o.z1) / 2);
+    this.type = 'wavy';
+    this.dynamic = false;
+    this.vel = new THREE.Vector3();
+  }
+
+  centre(z) { const u = (z - this.z0) / (this.z1 - this.z0); return this.amp * Math.sin(u * Math.PI * 2 * this.waves); }
+  height(z) { const u = (z - this.z0) / (this.z1 - this.z0); return this.y + this.bob * Math.sin(u * Math.PI * 2 * this.waves * 1.5); }
+  get top() { return this.y; }
+
+  topAt(x, z, m) {
+    if (z < this.z0 - m || z > this.z1 + m) return null;
+    const zc = clamp(z, this.z0, this.z1);
+    return Math.abs(x - this.centre(zc)) <= this.w / 2 + m ? this.height(zc) : null;
+  }
+
+  update() {}
+  carry() {}
   pushOut() {}
 }
 
@@ -261,15 +291,16 @@ class TiltDisc {
       mx += (l.pos.z - this.pos.z) + (l.headPos.z - this.pos.z) * 0.6;
       mz -= (l.pos.x - this.pos.x) + (l.headPos.x - this.pos.x) * 0.6;
     }
-    const step = (a, w, m) => {
-      w += (m * 0.16 - 1.6 * w - 1.8 * a) * dt;
-      const na = clamp(a + w * dt, -this.maxTilt, this.maxTilt);
+    // tips hard side to side, but only a little fore/aft so the bridges stay in reach
+    const step = (a, w, m, max) => {
+      w += (m * 0.2 - 1.5 * w - 1.4 * a) * dt;
+      const na = clamp(a + w * dt, -max, max);
       if (na !== a + w * dt) w *= 0.3;
       return [na, w];
     };
     const ptx = this.tx, ptz = this.tz;
-    [this.tx, this.wx] = step(this.tx, this.wx, mx);
-    [this.tz, this.wz] = step(this.tz, this.wz, mz);
+    [this.tx, this.wx] = step(this.tx, this.wx, mx, this.maxTiltX);
+    [this.tz, this.wz] = step(this.tz, this.wz, mz * 1.4, this.maxTiltZ);
     this.dtx = this.tx - ptx; this.dtz = this.tz - ptz;
     this.mesh.rotation.set(this.tx, 0, this.tz);
   }
@@ -299,7 +330,7 @@ class TiltDisc {
 
 export const COURSES = [
   { id: 'gauntlet', name: 'The Wobbly Gauntlet', sub: 'Sweepers · Sliders · Hay Hill · Windy Beams · Hammers · Spinners · Teeter-Totters' },
-  { id: 'rumble', name: 'Log Roll Rumble', sub: 'Conveyor Pushers · Rolling Logs · Tilting Disc · Elevators · Bounce Up · Sweepers' },
+  { id: 'rumble', name: 'Log Roll Rumble', sub: 'Conveyor Pushers · Spinning Log · Wavy Plank · Tilting Table · Elevators · Toadstools · Sweepers' },
   { id: 'duck', name: 'Duck Duck Llama', sub: 'Duck Bars · Hurdles · Sinking Stones · Head-Hunter Pendulums' },
 ];
 
@@ -399,8 +430,8 @@ export class Course {
       mesh.add(cap);
       if (o.belt) beltTop = cap.material.map;
       if (look === 'turf') {
-        const lip = shadowed(new THREE.Mesh(new RoundedBoxGeometry(o.hx * 2 + 0.12, 0.2, o.hz * 2 + 0.12, 2, 0.08), std('#5f9b3e', { roughness: 1 })));
-        lip.position.y = o.hy - 0.09;
+        const lip = shadowed(new THREE.Mesh(new RoundedBoxGeometry(o.hx * 2 - 0.01, 0.2, o.hz * 2 - 0.01, 2, 0.08), std('#5f9b3e', { roughness: 1 })));
+        lip.position.y = o.hy - 0.095;
         mesh.add(lip);
       }
     }
@@ -425,7 +456,7 @@ export class Course {
     };
     if (p.type === 'cyl') column(p.pos.x, p.pos.z, p.r * 0.85, p.pos.y - p.hy + 0.05);
     else if (p.type === 'ramp') {
-      for (let z = p.z0 + 3; z < p.z1; z += 8) column(p.cx, z, Math.min(p.w / 2, 3.5), p.topAt(p.cx, z, 0) - 1.4);
+      for (let z = p.z0 + 4.5; z < p.z1 - 2; z += 8) column(p.cx, z, Math.min(p.w / 2, 3.5), p.topAt(p.cx, z, 0) - 1.4);
     } else if (p.look === 'wood') {
       // timber stilts under narrow walkways
       const stilt = this.stiltMat || (this.stiltMat = std('#ffffff', { map: texCopy(barkTex(), 1, 6), roughness: 1 }));
@@ -498,10 +529,10 @@ export class Course {
 
     // A: start
     this.addPlatform({ type: 'box', pos: [0, -0.6, 0], hx: 12, hy: 0.6, hz: 9 });
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 13], hx: 3.5, hy: 0.6, hz: 4.6 });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 13], hx: 3.5, hy: 0.6, hz: 4 });
     // B: sweeper disk
     this.addPlatform({ type: 'cyl', pos: [0, -0.6, 29], r: 12, hy: 0.6 });
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 45], hx: 3.5, hy: 0.6, hz: 4.6 });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 45.35], hx: 3.5, hy: 0.6, hz: 4.35 });
     // D: sliding platforms over the void
     this.slider = [];
     [52.5, 59.5, 66.5, 73.5].forEach((z, i) => {
@@ -518,9 +549,9 @@ export class Course {
     // G
     this.addPlatform({ type: 'box', pos: [0, 5.4, 123], hx: 5, hy: 0.6, hz: 5 });
     // H: windy balance beams
-    this.addPlatform({ type: 'box', pos: [0, 5.6, 136], hx: 1.0, hy: 0.4, hz: 8 });
+    this.addPlatform({ type: 'box', pos: [0, 5.6, 135.85], hx: 1.0, hy: 0.4, hz: 7.85 });
     this.addPlatform({ type: 'cyl', pos: [0, 5.6, 146], r: 2.3, hy: 0.4 });
-    this.addPlatform({ type: 'box', pos: [0, 5.6, 156], hx: 1.0, hy: 0.4, hz: 8 });
+    this.addPlatform({ type: 'box', pos: [0, 5.6, 156.15], hx: 1.0, hy: 0.4, hz: 7.85 });
     // I
     this.addPlatform({ type: 'box', pos: [0, 5.4, 169], hx: 5, hy: 0.6, hz: 5 });
     // J: hammer walk
@@ -528,7 +559,7 @@ export class Course {
     // K: spinning disks
     [[209.5, 0.6], [219, -0.8], [228.5, 1.0]].forEach(([z, w], i) => {
       this.addPlatform({
-        type: 'cyl', pos: [0, 5.4, z], r: 5, hy: 0.6,
+        type: 'cyl', pos: [0, 5.4, z], r: 4.7, hy: 0.6,
         motion: (t, p) => { p.yaw = t * w; },
       });
     });
@@ -580,58 +611,67 @@ export class Course {
   }
 
   buildRumble() {
+    const D = 16; // everything after the log and the plank
     // start
     this.addPlatform({ type: 'box', pos: [0, -0.6, 0], hx: 12, hy: 0.6, hz: 9 });
-    // conveyor belt running backwards, with sliding pushers
+    // conveyor belt running backwards, with sliding hay-bale pushers
     this.addPlatform({ type: 'box', pos: [0, -0.6, 21], hx: 3.5, hy: 0.6, hz: 12, belt: -2.2 });
     [[15, 0], [22, 2.1], [29, 4.2]].forEach(([z, ph]) => this.addPlatform({
       type: 'box', pos: [0, 0.9, z], hx: 1.1, hy: 0.9, hz: 0.7, look: 'hay',
       motion: (t, p) => { p.pos.x = Math.sin(t * 1.25 + ph) * 2.6; },
     }));
     this.addPlatform({ type: 'box', pos: [0, -0.6, 36], hx: 3.5, hy: 0.6, hz: 3 });
-    // rolling logs: a treadmill of big candy-striped rollers
-    for (let i = 0; i < 6; i++) this.addLog(40.2 + i * 3.2, i);
-    this.addPlatform({ type: 'box', pos: [0, -0.6, 62.5], hx: 4, hy: 0.6, hz: 5 });
+    // log roll: a big spinning log along the track that keeps changing direction
+    this.spinLog = this.addSpinLog(39.4, 52.6, 1.15);
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 55.2], hx: 3, hy: 0.6, hz: 2.6 });
+    // a skinny wavy plank
+    this.wavy = this.addWavy({ z0: 57.8, z1: 72.2, y: 0 });
+    this.addPlatform({ type: 'box', pos: [0, -0.6, 62.5 + D], hx: 4, hy: 0.6, hz: 5 });
     // narrow bridge, tilting disc, narrow bridge
-    this.addPlatform({ type: 'box', pos: [0, -0.4, 69.5], hx: 1.2, hy: 0.4, hz: 2 });
-    this.addTilt(78);
-    this.addPlatform({ type: 'box', pos: [0, -0.4, 86.5], hx: 1.2, hy: 0.4, hz: 2 });
+    this.addPlatform({ type: 'box', pos: [0, -0.4, 69.5 + D], hx: 1.2, hy: 0.4, hz: 2 });
+    this.addTilt(78 + D);
+    this.addPlatform({ type: 'box', pos: [0, -0.4, 86.5 + D], hx: 1.2, hy: 0.4, hz: 2 });
     // elevators bobbing up toward the plateau
     this.elevators = [0.6, 1.9, 3.2, 4.5].map((top, i) => this.addPlatform({
-      type: 'box', pos: [0, top - 0.4, 90.9 + i * 5.2], hx: 2.2, hy: 0.4, hz: 2.2,
+      type: 'box', pos: [0, top - 0.4, 90.9 + D + i * 5.2], hx: 2.2, hy: 0.4, hz: 2.2,
       motion: (t, p) => { p.pos.y = top - 0.4 + Math.sin(t * 1.0 + i * 1.6) * 1.0; },
     }));
-    this.addPlatform({ type: 'box', pos: [0, 5.4, 114.5], hx: 5, hy: 0.6, hz: 5 });
-    // bounce pads up to the top deck
-    this.buildBouncePads([[-2.6, 6, 117.5], [0, 6, 117.5], [2.6, 6, 117.5]], { aim: 0.15, minVz: 6 });
-    this.addPlatform({ type: 'box', pos: [0, 8.4, 130], hx: 5, hy: 0.6, hz: 7.5 });
+    this.addPlatform({ type: 'box', pos: [0, 5.4, 114.5 + D], hx: 5, hy: 0.6, hz: 5 });
+    // toadstools up to the top deck
+    this.buildBouncePads([[-2.6, 6, 117.5 + D], [0, 6, 117.5 + D], [2.6, 6, 117.5 + D]], { aim: 0.15, minVz: 6 });
+    this.addPlatform({ type: 'box', pos: [0, 8.4, 130 + D], hx: 5, hy: 0.6, hz: 7.5 });
     // sweeper finale
-    this.addPlatform({ type: 'cyl', pos: [0, 8.4, 148.5], r: 11, hy: 0.6 });
-    this.buildSweepers(new THREE.Vector3(0, 9, 148.5), 10.6, 10.2);
-    this.addPlatform({ type: 'box', pos: [0, 8.4, 170], hx: 8, hy: 0.6, hz: 10.5 });
-    this.finishZ = 169.5;
+    this.addPlatform({ type: 'cyl', pos: [0, 8.4, 148.5 + D], r: 11, hy: 0.6 });
+    this.buildSweepers(new THREE.Vector3(0, 9, 148.5 + D), 10.6, 10.2);
+    this.addPlatform({ type: 'box', pos: [0, 8.4, 170 + D], hx: 8, hy: 0.6, hz: 10.5 });
+    this.finishZ = 169.5 + D;
     this.finishY = 9;
 
-    this.heightFn = (z) => (z < 88.5 ? 0 : z < 109.5 ? (6 * (z - 88.5)) / 21 : z < 122 ? 6 : 9);
+    this.heightFn = (z) => (z < 88.5 + D ? 0 : z < 109.5 + D ? (6 * (z - 88.5 - D)) / 21 : z < 122 + D ? 6 : 9);
     this.checkpoints = [
       { z: -1e9, spawn: new THREE.Vector3(0, 0.5, -5) },
-      { z: 57.5, spawn: new THREE.Vector3(0, 0.5, 62) },
-      { z: 110, spawn: new THREE.Vector3(0, 6.5, 112.5) },
-      { z: 124, spawn: new THREE.Vector3(0, 9.5, 127.5) },
+      { z: 53.5, spawn: new THREE.Vector3(0, 0.5, 55) },
+      { z: 57.5 + D, spawn: new THREE.Vector3(0, 0.5, 62 + D) },
+      { z: 110 + D, spawn: new THREE.Vector3(0, 6.5, 112.5 + D) },
+      { z: 124 + D, spawn: new THREE.Vector3(0, 9.5, 127.5 + D) },
     ];
     const P = (x, z, w = 2) => ({ x, z, w });
+    const plank = [];
+    for (let z = 58.4; z < 72; z += 1.2) plank.push(P(this.wavy.centre(z), z, 0.05));
     this.path = [
-      P(0, 8, 2), P(0, 33.5, 1.2), P(0, 38.5, 1), P(0, 57.8, 0.6), P(0, 66, 1), P(0, 71, 0.2), P(0, 78, 0.6),
-      P(0, 84.8, 0.2), P(0, 88.2, 0.4), ...this.elevators.map((plat) => ({ plat })),
-      P(0, 111, 1.5), P(0, 117.5, 5.2), P(0, 127, 2), P(0, 148.5, 3), P(0, 162, 2), P(0, 177, 4),
+      P(0, 8, 2), P(0, 33.5, 1.2), P(0, 38.6, 0.05), P(0, 45, 0.05), P(0, 52.4, 0.05), P(0, 55, 1), ...plank,
+      P(0, 73.5, 1), P(0, 82, 1), P(0, 71 + D, 0.2), P(0, 78 + D, 0.6),
+      P(0, 84.8 + D, 0.2), P(0, 88.2 + D, 0.4), ...this.elevators.map((plat) => ({ plat })),
+      P(0, 111 + D, 1.5), P(0, 117.5 + D, 5.2), P(0, 127 + D, 2), P(0, 148.5 + D, 3), P(0, 162 + D, 2), P(0, 177 + D, 4),
     ];
     this.hints = [
       { z: 8, text: 'Conveyor! Keep walking and dodge the <b>pushers</b>' },
-      { z: 35, text: 'Rolling logs push you back. Keep going and stay centred!' },
-      { z: 66, text: 'The disc tilts toward weight, and your heavy head counts!' },
-      { z: 86, text: 'Ride the elevators up. Jump when the next one is level' },
-      { z: 111, text: 'Hit a bounce pad with some speed to reach the top deck' },
-      { z: 136, text: 'Jump the red bar, duck the blue one!' },
+      { z: 37, text: 'Log roll! It throws you sideways and keeps switching. Stay on the <b>crown</b>' },
+      { z: 56, text: 'Skinny wavy plank: slow down for the bends!' },
+      { z: 66 + D, text: 'The disc tilts toward weight, and your heavy head counts!' },
+      { z: 86 + D, text: 'Ride the elevators up. Jump when the next one is level' },
+      { z: 111 + D, text: 'Bounce off a toadstool to reach the top deck' },
+      { z: 136 + D, text: 'Jump the red bar, duck the blue one!' },
     ];
   }
 
@@ -647,7 +687,7 @@ export class Course {
     rows.forEach((z, row) => [-2.8, 0, 2.8].forEach((x, lane) => {
       const ph = row * 1.3 + lane * 2.1;
       const p = this.addPlatform({
-        type: 'cyl', pos: [x, -0.6, z], r: 1.45, hy: 0.6, look: 'stone',
+        type: 'cyl', pos: [x, -0.6, z], r: 1.36, hy: 0.6, look: 'stone',
         // slow settle at first, then it plunges into the lake
         motion: (t, pl) => { const k = pl.sink || 0; pl.pos.y = -0.6 - (0.35 * k + 22 * k ** 4) + Math.sin(t * 2 + ph) * 0.04; },
       });
@@ -692,17 +732,17 @@ export class Course {
     const y = floor + (kind === 'duck' ? 2.1 : 0.35);
     const r = kind === 'duck' ? 0.2 : 0.18;
     const g = new THREE.Group();
-    const bar = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(r, r, halfW * 2 + 0.6, 16),
+    const bar = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(r, r, halfW * 2, 16),
       std('#ffffff', { map: railTex(kind === 'duck' ? DUCK_BLUE : JUMP_RED, 12) })));
     bar.rotation.z = Math.PI / 2;
     bar.position.set(0, y, z);
     g.add(bar);
     for (const s of [1, -1]) {
       const post = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, y - floor + 0.2, 8), std('#ffffff', { map: texCopy(barkTex(), 1, 2) })));
-      post.position.set(s * (halfW + 0.3), (y + floor) / 2, z);
+      post.position.set(s * (halfW - 0.14), (y + floor) / 2, z);
       g.add(post);
       const knob = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.3, 8), std('#6b4a2e')));
-      knob.position.set(s * (halfW + 0.3), y, z);
+      knob.position.set(s * (halfW - 0.14), y + 0.2, z);
       g.add(knob);
     }
     this.scene.add(g);
@@ -738,24 +778,72 @@ export class Course {
     }
   }
 
-  addLog(z, i) {
-    const log = new Log({ pos: [0, -2.2, z], r: 2.2, hw: 3.5, speed: 2.2 });
+  addSpinLog(z0, z1, r, opts = {}) {
+    const log = new SpinLog({ pos: [0, -r, (z0 + z1) / 2], r, hl: (z1 - z0) / 2, spin: 2.4, freq: 0.75, phase: 0, ...opts });
     const g = new THREE.Group();
     g.position.copy(log.pos);
-    // bark on the sides, tree rings on the sawn ends
-    const m = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 7, 40, 1, false),
-      [std('#ffffff', { map: texCopy(barkTex(), 3, 2), roughness: 1 }), std('#ffffff', { map: ringsTex() }), std('#ffffff', { map: ringsTex() })]));
-    m.rotation.z = Math.PI / 2;
-    m.rotation.y = i * 0.7;
-    g.add(m);
-    this.scene.add(g);
+    const spinner = new THREE.Group();
+    spinner.rotation.x = Math.PI / 2; // cylinder axis along z
+    const m = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(r, r, z1 - z0, 32, 1, false),
+      [std('#ffffff', { map: texCopy(barkTex(), 3, (z1 - z0) / 3), roughness: 1 }), std('#ffffff', { map: ringsTex() }), std('#ffffff', { map: ringsTex() })]));
+    spinner.add(m);
+    g.add(spinner);
+    // axle posts at each end, standing in the lake
+    const post = std('#ffffff', { map: texCopy(barkTex(), 1, 6), roughness: 1 });
+    for (const z of [z0 - 0.35, z1 + 0.35]) {
+      const h = -r - LAKE_Y;
+      const p = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, h, 8), post));
+      p.position.set(0, -r - h / 2, z);
+      this.scene.add(p);
+      const hub = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.3, 12), std('#4a4a4a', { metalness: 0.4, roughness: 0.5 })));
+      hub.rotation.x = Math.PI / 2;
+      hub.position.set(0, -r, z);
+      this.scene.add(hub);
+    }
     log.mesh = g;
+    this.scene.add(g);
     this.platforms.push(log);
     return log;
   }
 
+  addWavy(o) {
+    const wp = new WavyPlank({ w: 0.9, amp: 1.6, waves: 1, bob: 0.25, ...o });
+    // a ribbon along the curve: plank top plus thick sides, textured with boards
+    const N = 120, th = 0.22, pos = [], uv = [], idx = [];
+    const L = wp.z1 - wp.z0;
+    for (let i = 0; i <= N; i++) {
+      const z = wp.z0 + (L * i) / N, cx = wp.centre(z), y = wp.height(z), v = (L * i) / N / 1.2;
+      for (const [x, yy, u] of [[cx - wp.w / 2, y - th, 0], [cx - wp.w / 2, y, 0.1], [cx + wp.w / 2, y, 0.9], [cx + wp.w / 2, y - th, 1]]) {
+        pos.push(x, yy, z); uv.push(u, v);
+      }
+    }
+    for (let i = 0; i < N; i++) for (let k = 0; k < 3; k++) {
+      const a = i * 4 + k, b = a + 1, c = a + 4, d = c + 1;
+      idx.push(a, b, c, b, d, c);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const tex = texCopy(woodTex(), 0.25, 1);
+    const mesh = shadowed(new THREE.Mesh(g, std('#ffffff', { map: tex, side: THREE.DoubleSide })));
+    this.scene.add(mesh);
+    wp.mesh = mesh;
+    // rope-lashed stilts every few metres
+    const stilt = std('#ffffff', { map: texCopy(barkTex(), 1, 6), roughness: 1 });
+    for (let z = wp.z0 + 1; z < wp.z1; z += 3.2) {
+      const y = wp.height(z) - th, h = y - LAKE_Y;
+      const m = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, h, 7), stilt));
+      m.position.set(wp.centre(z), y - h / 2, z);
+      this.scene.add(m);
+    }
+    this.platforms.push(wp);
+    return wp;
+  }
+
   addTilt(z) {
-    const td = new TiltDisc({ pos: [0, -0.4, z], r: 6.5, hy: 0.4, maxTilt: 0.14 });
+    const td = new TiltDisc({ pos: [0, -0.4, z], r: 6.5, hy: 0.4, maxTiltX: 0.08, maxTiltZ: 0.34 });
     const g = new THREE.Group();
     g.position.copy(td.pos);
     // a big wooden table-top balanced on a boulder
@@ -862,8 +950,8 @@ export class Course {
     spots.forEach(([z, floor], i) => {
       const L = 5.6, yp = floor + clear + 0.85 + L;
       for (const s of [1, -1]) {
-        const postM = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, yp - floor + 0.8, 12), frameMat));
-        postM.position.set(s * 4.6, (yp + floor - 0.8) / 2, z);
+        const postM = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, yp - LAKE_Y, 10), frameMat));
+        postM.position.set(s * 4.6, (yp + LAKE_Y) / 2, z);
         this.scene.add(postM);
         this.occluders.push(postM);
       }
@@ -921,8 +1009,9 @@ export class Course {
         blades.add(holder);
       }
       g.add(blades);
-      const stand = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 8, 8), std('#ffffff', { map: texCopy(barkTex(), 1, 3) })));
-      stand.position.set(0, -4.6, -0.8);
+      const standH = 6.6 - 0.7 - LAKE_Y;
+      const stand = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.45, standH, 8), std('#ffffff', { map: texCopy(barkTex(), 1, 8) })));
+      stand.position.set(0, -0.7 - standH / 2, -0.8);
       g.add(stand);
       this.scene.add(g);
       this.fans.push({ blades, side: s, spin: 0 });
@@ -985,7 +1074,8 @@ export class Course {
     S.add(fl);
     // bunting strung around the finish meadow
     for (const s of [1, -1]) {
-      const posts = [3, 9, 15].map((dz) => new THREE.Vector3(s * 7.4, this.finishY, this.finishZ + dz));
+      // keep the poles on the finish meadow (it ends ~10m past the line)
+      const posts = [2.5, 6, 9.5].map((dz) => new THREE.Vector3(s * 7.3, this.finishY, this.finishZ + dz));
       posts.forEach((p) => {
         const pole = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3, 8), std('#6b4a2e')));
         pole.position.set(p.x, p.y + 1.5, p.z); S.add(pole);
@@ -1107,6 +1197,8 @@ export class Course {
       if (!ll.grounded || !sp) continue;
       if (sp.type === 'seesaw') ll.vel.z += Math.sin(sp.theta) * 7 * dt;
       if (sp.type === 'tilt') { ll.vel.z += Math.sin(sp.tx) * 7 * dt; ll.vel.x -= Math.sin(sp.tz) * 7 * dt; }
+      // off the crown of a log you roll down its side
+      if (sp.type === 'spinlog') ll.vel.x += clamp((ll.pos.x - sp.pos.x) / sp.r, -1, 1) * 9 * dt;
     }
     for (const p of this.platforms) p.update(t, dt);
 
