@@ -74,7 +74,7 @@ function hookEvents(ll) {
   ll.on('onJump', (l) => { if (l.isPlayer) sfx.jump(); });
   ll.on('onBounce', (l) => { if (l.isPlayer || l.pos.distanceTo(player.pos) < 10) sfx.boing(); if (l.isPlayer) toast('BOING!', '#f2c14e'); });
   ll.on('onTopple', (l) => {
-    if (l.isPlayer && !game.mashHinted) { game.mashHinted = true; setTimeout(() => showHint('Knocked over? <b>Mash Space</b> to get up faster!'), 600); }
+    if (l.isPlayer && !game.mashHinted) { game.mashHinted = true; setTimeout(() => showHint('Knocked over? <b>Mash jump</b> to get up faster!'), 600); }
     if (l.isPlayer) { sfx.bleat(1); toast(['WHOOPS!', 'TOPPLED!', 'NECK FAIL!', 'TIMBERRR!'][Math.floor(Math.random() * 4)], '#e4572e'); shake = 0.5; }
     else if (l.pos.distanceTo(player.pos) < 14) sfx.bleat(0.85 + Math.random() * 0.4);
   });
@@ -111,7 +111,7 @@ ghost.makeGhost();
 let ghostRun = null;      // frames of the best run on this course
 let recording = [];
 let recordT = 0;
-const ghostKey = () => `lurching-llama-ghost-${course.info.id}`;
+const ghostKey = () => `lurching-llama-ghost2-${course.info.id}`;
 function loadGhost() {
   try { ghostRun = JSON.parse(localStorage.getItem(ghostKey()) || 'null'); } catch { ghostRun = null; }
   const valid = Array.isArray(ghostRun) && ghostRun.length > 1 && ghostRun.every((f) => Array.isArray(f) && f.length === 6 && f.every(Number.isFinite));
@@ -286,7 +286,12 @@ function renderStats() {
 }
 renderStats();
 
-const BEST_KEY = 'lurching-llama-best';
+// Best times and ghosts from before the momentum rework (when you could sprint) don't count.
+const BEST_KEY = 'lurching-llama-best2';
+try {
+  localStorage.removeItem('lurching-llama-best');
+  for (const c of COURSES) localStorage.removeItem(`lurching-llama-ghost-${c.id}`);
+} catch { /* storage unavailable */ }
 const bestKey = () => (course.info.id === 'gauntlet' ? BEST_KEY : `${BEST_KEY}-${course.info.id}`);
 function loadBest() { try { return parseFloat(localStorage.getItem(bestKey())) || 0; } catch { return 0; } }
 function saveBest(t) { try { localStorage.setItem(bestKey(), String(t)); } catch { /* storage unavailable */ } }
@@ -306,8 +311,8 @@ addEventListener('keydown', (e) => {
     if (e.code === 'KeyP') setPaused(false);
     return;
   }
-  if (e.code === 'Space') jumpPressed = true;
-  if ((e.code === 'Space' || e.code === 'Enter') && game.state === 'intro') startCountdown();
+  if (e.code === 'Space' || e.code === 'KeyZ') jumpPressed = true;
+  if ((e.code === 'Space' || e.code === 'KeyZ' || e.code === 'Enter') && game.state === 'intro') startCountdown();
   else if (e.code === 'Enter' && game.state === 'menu') startQuickRace();
   else if (e.code === 'Enter' && game.state === 'results') $('again').click();
   if (e.code === 'KeyR' && game.state === 'racing' && !player.finished) respawnAtCheckpoint(player);
@@ -454,8 +459,8 @@ function playerInput() {
   const l = Math.hypot(x, z);
   if (l > 1) { x /= l; z /= l; }
   const inp = {
-    x, z, moveLen: Math.min(1, l), jump: jumpPressed, jumpHeld: !!(keys.Space || touch.jumpHeld || pad.jump),
-    duck: !!(keys.KeyC || keys.ControlLeft || keys.KeyQ || touch.duck || pad.duck),
+    x, z, moveLen: Math.min(1, l), jump: jumpPressed, jumpHeld: !!(keys.Space || keys.KeyZ || touch.jumpHeld || pad.jump),
+    duck: !!(keys.KeyC || keys.KeyX || keys.ControlLeft || keys.KeyQ || touch.duck || pad.duck),
   };
   jumpPressed = false;
   return inp;

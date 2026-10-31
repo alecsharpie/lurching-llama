@@ -25,8 +25,8 @@ python3 -m http.server 8000
 | Key | Action |
 | --- | --- |
 | W A S D / arrows | Move (relative to the camera) |
-| Space | Jump (tap for a hop, hold for a full jump) · mash it while knocked over to get up faster |
-| C (or Q / Ctrl) | Duck your neck under high bars |
+| Space or Z | Jump (tap for a hop, hold for a full jump) · mash it while knocked over to get up faster |
+| C or X (or Q / Ctrl) | Duck your neck under high bars |
 | Mouse | Look around (click to capture the mouse, Esc to release) |
 | R | Back to the last checkpoint |
 | M | Mute |

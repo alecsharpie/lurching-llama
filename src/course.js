@@ -548,7 +548,7 @@ export class Course {
     this.buildWind();
     this.heightFn = (z) => (z < this.ramp.z0 ? 0 : z > this.ramp.z1 ? 6 : this.ramp.topAt(0, z, 0));
     this.hints = [
-      { z: 10, text: 'Red bar: <b>JUMP</b> it (Space) · Blue bar: <b>DUCK</b> (hold C)' },
+      { z: 10, text: 'Red bar: <b>JUMP</b> it (Space / Z) · Blue bar: <b>DUCK</b> (hold C / X)' },
       { z: 46, text: 'Ride the rafts, jump the gaps. Don\'t overshoot: you stop slowly!' },
       { z: 86, text: 'Hay bales incoming! Weave up the hill' },
       { z: 121, text: 'Bounce pads launch you onto the beam. Risky shortcut!' },
@@ -680,7 +680,7 @@ export class Course {
       P(0, 91, 2), P(0, 113.5, 2), P(0, 121.5, 0.5), P(0, 140.5, 0.2), P(0, 158, 4),
     ];
     this.hints = [
-      { z: 8, text: 'Blue bars: <b>DUCK</b> (hold C) · Low red bars: <b>JUMP</b>' },
+      { z: 8, text: 'Blue bars: <b>DUCK</b> (hold C / X) · Low red bars: <b>JUMP</b>' },
       { z: 41, text: 'Stepping stones sink while you stand on them. Keep hopping!' },
       { z: 88, text: 'The pendulums swing at head height. <b>Duck</b> and they pass over you' },
       { z: 120, text: 'Last stretch! Duck, jump, duck… and wobble home' },
