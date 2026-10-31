@@ -106,3 +106,5 @@ Everything is procedural, with no model files or animation clips:
 - `src/meadow.js`: procedural meadow textures, mountains, pines and other scenery
 - `src/audio.js`: synthesised sound effects and music
 - `src/util.js`: noise, wool geometry and helpers
+- `tools/check-scenery.mjs`: headless checks for z-fighting and for moving pieces clipping
+  through scenery over time (see the comment at the top for how to run it)

@@ -69,6 +69,10 @@ function textTex(text, bg, fg, w = 1024, h = 192) {
 }
 
 const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.7, ...extra });
+// Surfaces laid on top of other surfaces (grass caps, the finish line): lifted clear and
+// pulled toward the camera in the depth buffer so they never fight with what's beneath.
+const CAP_Y = 0.015;
+const decal = (color, extra = {}, k = 1) => std(color, { polygonOffset: true, polygonOffsetFactor: -1 * k, polygonOffsetUnits: -4 * k, ...extra });
 
 function shadowed(m) { m.castShadow = true; m.receiveShadow = true; return m; }
 
@@ -353,7 +357,6 @@ export class Course {
     this.tilts = [];
     this.pads = [];
     this.ramp = null;
-    this.hints = [];
     this.occluders = []; // static props the chase camera shouldn't clip through
     this.time = 0;
     this.sinkers = [];
@@ -387,10 +390,10 @@ export class Course {
         : look === 'hay' ? std('#ffffff', { map: texCopy(hayTex(), rx, ry), roughness: 1 })
           : std('#ffffff', { map: texCopy(woodTex(1), rx, ry), roughness: 0.9 });
     const topMat = (rx, ry) => {
-      if (o.topTex) return std('#ffffff', { map: o.topTex, roughness: 0.9 });
+      if (o.topTex) return decal('#ffffff', { map: o.topTex, roughness: 0.9 });
       const t = look === 'turf' ? grassTex() : look === 'mill' ? millTex() : look === 'stone' ? stoneTex() : look === 'hay' ? hayTex()
         : look === 'belt' ? railTex('#8a6141', 2) : woodTex();
-      return std('#ffffff', { map: look === 'mill' ? t : texCopy(t, rx, ry), roughness: 0.95 });
+      return decal('#ffffff', { map: look === 'mill' ? t : texCopy(t, rx, ry), roughness: 0.95 });
     };
     let mesh, beltTop = null;
     if (o.type === 'cyl') {
@@ -398,7 +401,7 @@ export class Course {
       const side = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(o.r, o.r * 0.92, o.hy * 2, 48), sideMat(o.r, o.hy)));
       mesh.add(side);
       const cap = shadowed(new THREE.Mesh(new THREE.CircleGeometry(o.r - 0.02, 48), topMat(o.r / 2.5, o.r / 2.5)));
-      cap.rotation.x = -Math.PI / 2; cap.position.y = o.hy + 0.005;
+      cap.rotation.x = -Math.PI / 2; cap.position.y = o.hy + CAP_Y;
       mesh.add(cap);
       if (look === 'turf') {
         // a grassy lip that overhangs the earth a little
@@ -414,7 +417,7 @@ export class Course {
       box.position.y = -th / 2;
       mesh.add(box);
       const cap = shadowed(new THREE.Mesh(new THREE.PlaneGeometry(o.w - 0.1, len - 0.1), topMat(o.w / 4, len / 4)));
-      cap.rotation.x = -Math.PI / 2; cap.position.y = 0.005;
+      cap.rotation.x = -Math.PI / 2; cap.position.y = CAP_Y;
       mesh.add(cap);
       mesh.position.set(o.cx, (o.y0 + o.y1) / 2, (o.z0 + o.z1) / 2);
       mesh.rotation.x = -ang;
@@ -426,12 +429,12 @@ export class Course {
       mesh.add(box);
       const inset = look === 'turf' ? 0.1 : 0.3;
       const cap = shadowed(new THREE.Mesh(new THREE.PlaneGeometry(o.hx * 2 - inset, o.hz * 2 - inset), topMat(o.hx / 2.5, o.hz / 2.5)));
-      cap.rotation.x = -Math.PI / 2; cap.position.y = o.hy + 0.005;
+      cap.rotation.x = -Math.PI / 2; cap.position.y = o.hy + CAP_Y;
       mesh.add(cap);
       if (o.belt) beltTop = cap.material.map;
       if (look === 'turf') {
         const lip = shadowed(new THREE.Mesh(new RoundedBoxGeometry(o.hx * 2 - 0.01, 0.2, o.hz * 2 - 0.01, 2, 0.08), std('#5f9b3e', { roughness: 1 })));
-        lip.position.y = o.hy - 0.095;
+        lip.position.y = o.hy - 0.13; // its top stays 3cm under the grass cap
         mesh.add(lip);
       }
     }
@@ -492,8 +495,8 @@ export class Course {
     g.position.copy(sw.pos);
     const board = shadowed(new THREE.Mesh(new RoundedBoxGeometry(3, 0.8, 10, 3, 0.18), std('#ffffff', { map: texCopy(woodTex(1), 3, 1) })));
     g.add(board);
-    const cap = shadowed(new THREE.Mesh(new THREE.PlaneGeometry(2.8, 9.8), std('#ffffff', { map: texCopy(woodTex(), 1, 3) })));
-    cap.rotation.x = -Math.PI / 2; cap.position.y = 0.405;
+    const cap = shadowed(new THREE.Mesh(new THREE.PlaneGeometry(2.8, 9.8), decal('#ffffff', { map: texCopy(woodTex(), 1, 3) })));
+    cap.rotation.x = -Math.PI / 2; cap.position.y = 0.4 + CAP_Y;
     g.add(cap);
     this.scene.add(g);
     // fulcrum on a rock pillar rising from the lake
@@ -501,6 +504,7 @@ export class Course {
     fulcrum.rotation.z = Math.PI / 2;
     fulcrum.rotation.x = Math.PI / 2;
     fulcrum.position.set(0, 4.7, z);
+    fulcrum.userData.attached = true;
     this.scene.add(fulcrum);
     const pillar = shadowed(new THREE.Mesh(rockColumn(1.1, 4.2 - LAKE_Y), std('#ffffff', { map: texCopy(stoneTex(), 2, 4) })));
     pillar.position.set(0, (4.2 + LAKE_Y) / 2, z);
@@ -578,16 +582,6 @@ export class Course {
     this.buildHammers();
     this.buildWind();
     this.heightFn = (z) => (z < this.ramp.z0 ? 0 : z > this.ramp.z1 ? 6 : this.ramp.topAt(0, z, 0));
-    this.hints = [
-      { z: 10, text: 'Red bar: <b>JUMP</b> it (Space / Z) · Blue bar: <b>DUCK</b> (hold C / X)' },
-      { z: 46, text: 'Ride the rafts, jump the gaps. Don\'t overshoot: you stop slowly!' },
-      { z: 86, text: 'Hay bales incoming! Weave up the hill' },
-      { z: 121, text: 'Bounce pads launch you onto the beam. Risky shortcut!' },
-      { z: 130, text: 'Gusty! Wind shoves your head. Step <b>toward</b> the lean to recover' },
-      { z: 171, text: 'Wait for a gap between the hammers, then go!' },
-      { z: 204, text: 'Spinning disks: don\'t fight the spin too hard' },
-      { z: 234, text: 'Teeter-totters! Your heavy head tips them. Keep moving!' },
-    ];
 
     this.checkpoints = [
       { z: -1e9, spawn: new THREE.Vector3(0, 0.5, -5) },
@@ -628,9 +622,9 @@ export class Course {
     this.wavy = this.addWavy({ z0: 57.8, z1: 72.2, y: 0 });
     this.addPlatform({ type: 'box', pos: [0, -0.6, 62.5 + D], hx: 4, hy: 0.6, hz: 5 });
     // narrow bridge, tilting disc, narrow bridge
-    this.addPlatform({ type: 'box', pos: [0, -0.4, 69.5 + D], hx: 1.2, hy: 0.4, hz: 2 });
+    this.addPlatform({ type: 'box', pos: [0, -0.4, 69.35 + D], hx: 1.2, hy: 0.4, hz: 1.85 }); // a gap so the tipping table clears it
     this.addTilt(78 + D);
-    this.addPlatform({ type: 'box', pos: [0, -0.4, 86.5 + D], hx: 1.2, hy: 0.4, hz: 2 });
+    this.addPlatform({ type: 'box', pos: [0, -0.4, 86.65 + D], hx: 1.2, hy: 0.4, hz: 1.85 });
     // elevators bobbing up toward the plateau
     this.elevators = [0.6, 1.9, 3.2, 4.5].map((top, i) => this.addPlatform({
       type: 'box', pos: [0, top - 0.4, 90.9 + D + i * 5.2], hx: 2.2, hy: 0.4, hz: 2.2,
@@ -663,15 +657,6 @@ export class Course {
       P(0, 73.5, 1), P(0, 82, 1), P(0, 71 + D, 0.2), P(0, 78 + D, 0.6),
       P(0, 84.8 + D, 0.2), P(0, 88.2 + D, 0.4), ...this.elevators.map((plat) => ({ plat })),
       P(0, 111 + D, 1.5), P(0, 117.5 + D, 5.2), P(0, 127 + D, 2), P(0, 148.5 + D, 3), P(0, 162 + D, 2), P(0, 177 + D, 4),
-    ];
-    this.hints = [
-      { z: 8, text: 'Conveyor! Keep walking and dodge the <b>pushers</b>' },
-      { z: 37, text: 'Log roll! It throws you sideways and keeps switching. Stay on the <b>crown</b>' },
-      { z: 56, text: 'Skinny wavy plank: slow down for the bends!' },
-      { z: 66 + D, text: 'The disc tilts toward weight, and your heavy head counts!' },
-      { z: 86 + D, text: 'Ride the elevators up. Jump when the next one is level' },
-      { z: 111 + D, text: 'Bounce off a toadstool to reach the top deck' },
-      { z: 136 + D, text: 'Jump the red bar, duck the blue one!' },
     ];
   }
 
@@ -718,12 +703,6 @@ export class Course {
     this.path = [
       P(0, 8, 2), { x: 0, z: 36.5, w: 0, lanes: [-2.4, 0, 2.4] }, ...rows.map((z) => ({ x: 0, z, w: 0, lanes: [-2.8, 0, 2.8] })), P(0, 81.5, 2),
       P(0, 91, 2), P(0, 113.5, 2), P(0, 121.5, 0.5), P(0, 140.5, 0.2), P(0, 158, 4),
-    ];
-    this.hints = [
-      { z: 8, text: 'Blue bars: <b>DUCK</b> (hold C / X) · Low red bars: <b>JUMP</b>' },
-      { z: 41, text: 'Stepping stones sink while you stand on them. Keep hopping!' },
-      { z: 88, text: 'The pendulums swing at head height. <b>Duck</b> and they pass over you' },
-      { z: 120, text: 'Last stretch! Duck, jump, duck… and wobble home' },
     ];
   }
 
@@ -788,16 +767,12 @@ export class Course {
       [std('#ffffff', { map: texCopy(barkTex(), 3, (z1 - z0) / 3), roughness: 1 }), std('#ffffff', { map: ringsTex() }), std('#ffffff', { map: ringsTex() })]));
     spinner.add(m);
     g.add(spinner);
-    // axle posts at each end, standing in the lake
-    const post = std('#ffffff', { map: texCopy(barkTex(), 1, 6), roughness: 1 });
+    // iron axle hubs bolted into the platforms at each end
     for (const z of [z0 - 0.35, z1 + 0.35]) {
-      const h = -r - LAKE_Y;
-      const p = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, h, 8), post));
-      p.position.set(0, -r - h / 2, z);
-      this.scene.add(p);
       const hub = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.3, 12), std('#4a4a4a', { metalness: 0.4, roughness: 0.5 })));
       hub.rotation.x = Math.PI / 2;
       hub.position.set(0, -r, z);
+      hub.userData.attached = true;
       this.scene.add(hub);
     }
     log.mesh = g;
@@ -849,8 +824,8 @@ export class Course {
     // a big wooden table-top balanced on a boulder
     const side = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(6.5, 6.3, 0.8, 64), std('#ffffff', { map: texCopy(woodTex(1), 8, 1) })));
     g.add(side);
-    const cap = shadowed(new THREE.Mesh(new THREE.CircleGeometry(6.48, 64), std('#ffffff', { map: texCopy(woodTex(), 3, 3) })));
-    cap.rotation.x = -Math.PI / 2; cap.position.y = 0.405;
+    const cap = shadowed(new THREE.Mesh(new THREE.CircleGeometry(6.48, 64), decal('#ffffff', { map: texCopy(woodTex(), 3, 3) })));
+    cap.rotation.x = -Math.PI / 2; cap.position.y = 0.4 + CAP_Y;
     g.add(cap);
     const rim = shadowed(new THREE.Mesh(new THREE.TorusGeometry(6.5, 0.12, 10, 64), std('#5a3b20')));
     rim.rotation.x = Math.PI / 2; rim.position.y = 0.34;
@@ -858,6 +833,7 @@ export class Course {
     this.scene.add(g);
     const ball = shadowed(new THREE.Mesh(new THREE.IcosahedronGeometry(1.2, 1), std('#ffffff', { map: texCopy(stoneTex()), flatShading: true })));
     ball.position.set(0, -1.5, z);
+    ball.userData.attached = true;
     this.scene.add(ball);
     const pillar = shadowed(new THREE.Mesh(rockColumn(1.3, -2.2 - LAKE_Y), std('#ffffff', { map: texCopy(stoneTex(), 2, 4) })));
     pillar.position.set(0, (-2.2 + LAKE_Y) / 2, z);
@@ -921,10 +897,12 @@ export class Course {
   buildSweepers(c, low = 11.6, high = 11.2) {
     const post = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.15, 3.6, 24), std('#ffffff', { map: texCopy(barkTex(), 2, 1), roughness: 1 })));
     post.position.set(c.x, c.y + 1.8, c.z);
+    post.userData.attached = true;
     this.occluders.push(post);
     this.scene.add(post);
     const cap = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.92, 0.92, 0.12, 24), std('#ffffff', { map: ringsTex() })));
     cap.position.set(c.x, c.y + 3.6, c.z);
+    cap.userData.attached = true;
     this.scene.add(cap);
     const mk = (y, radius, len, omega, color, isLow) => {
       const g = new THREE.Group();
@@ -951,11 +929,11 @@ export class Course {
       const L = 5.6, yp = floor + clear + 0.85 + L;
       for (const s of [1, -1]) {
         const postM = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, yp - LAKE_Y, 10), frameMat));
-        postM.position.set(s * 4.6, (yp + LAKE_Y) / 2, z);
+        postM.position.set(s * 6, (yp + LAKE_Y) / 2, z);
         this.scene.add(postM);
         this.occluders.push(postM);
       }
-      const beam = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 9.4, 12), frameMat));
+      const beam = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 12.4, 12), frameMat));
       beam.rotation.z = Math.PI / 2;
       beam.position.set(0, yp, z);
       this.scene.add(beam);
@@ -963,6 +941,7 @@ export class Course {
       piv.position.set(0, yp, z);
       const rope = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, L, 8), std('#c9a66b')));
       rope.position.y = -L / 2;
+      rope.userData.attached = true; // hangs from the beam by design
       piv.add(rope);
       // a swinging hay bale with a painted warning band
       const head = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 1.9, 28), std('#ffffff', { map: texCopy(hayTex(), 2, 1), roughness: 1 })));
@@ -1066,10 +1045,10 @@ export class Course {
     arch(-1.5, 0, 'LURCHING LLAMA', '#7a3b2e');
     arch(this.finishZ, this.finishY, 'FINISH!', '#2f5d8a');
     // finish line
-    const fl = new THREE.Mesh(new THREE.PlaneGeometry(15.6, 1.4), std('#ffffff', { map: checkerTex('#2b2b2b', '#f6efdf', 12) }));
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(15.6, 1.4), decal('#ffffff', { map: checkerTex('#2b2b2b', '#f6efdf', 12) }, 2));
     fl.material.map.repeat.set(5, 0.45);
     fl.rotation.x = -Math.PI / 2;
-    fl.position.set(0, this.finishY + 0.02, this.finishZ);
+    fl.position.set(0, this.finishY + CAP_Y + 0.015, this.finishZ);
     fl.receiveShadow = true;
     S.add(fl);
     // bunting strung around the finish meadow
@@ -1112,10 +1091,14 @@ export class Course {
     const treeSpots = [];
     const stackMat = std('#ffffff', { map: texCopy(stoneTex(), 3, 5), roughness: 1 });
     const turfMat = std('#ffffff', { map: texCopy(grassTex(), 3, 3), roughness: 1 });
-    for (let i = 0; i < 16; i++) {
+    const stacks = [];
+    for (let i = 0, tries = 0; i < 16 && tries < 200; tries++) {
       const side = i % 2 ? -1 : 1;
       const r = 5 + this.rand() * 9, top = -12 + this.rand() * 22;
-      const x = side * (28 + this.rand() * 70), z = -50 + this.rand() * (this.finishZ + 110);
+      const x = side * (16 + r + this.rand() * 70), z = -50 + this.rand() * (this.finishZ + 110);
+      if (stacks.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + r + 4)) continue;
+      stacks.push({ x, z, r });
+      i++;
       const col = shadowed(new THREE.Mesh(rockColumn(r, top - LAKE_Y + 2), stackMat));
       col.position.set(x, (top + LAKE_Y) / 2 - 1, z);
       S.add(col);

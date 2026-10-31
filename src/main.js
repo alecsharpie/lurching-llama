@@ -74,7 +74,6 @@ function hookEvents(ll) {
   ll.on('onJump', (l) => { if (l.isPlayer) sfx.jump(); });
   ll.on('onBounce', (l) => { if (l.isPlayer || l.pos.distanceTo(player.pos) < 10) sfx.boing(); if (l.isPlayer) toast('BOING!', '#f2c14e'); });
   ll.on('onTopple', (l) => {
-    if (l.isPlayer && !game.mashHinted) { game.mashHinted = true; setTimeout(() => showHint('Knocked over? <b>Mash jump</b> to get up faster!'), 600); }
     if (l.isPlayer) { sfx.bleat(1); toast(['WHOOPS!', 'TOPPLED!', 'NECK FAIL!', 'TIMBERRR!'][Math.floor(Math.random() * 4)], '#e4572e'); shake = 0.5; }
     else if (l.pos.distanceTo(player.pos) < 14) sfx.bleat(0.85 + Math.random() * 0.4);
   });
@@ -162,16 +161,6 @@ llamas.forEach((l) => { if (!l.isPlayer) makeTag(l); });
 makeTag(ghost);
 ghost.tagEl.textContent = 'Your best';
 ghost.tagEl.classList.add('ghost-tag');
-
-// one-time contextual hints as you reach each obstacle
-let hintIdx = 0;
-function showHint(html) {
-  const el = $('hint');
-  el.innerHTML = html;
-  el.classList.add('show');
-  clearTimeout(showHint.t);
-  showHint.t = setTimeout(() => el.classList.remove('show'), 4500);
-}
 
 // --- pick your llama's look (bots take the remaining styles)
 const STYLE_KEY = 'lurching-llama-style';
@@ -684,15 +673,6 @@ function respawnAtCheckpoint(l) {
   if (l.isPlayer) { $('fade').classList.add('flash'); setTimeout(() => $('fade').classList.remove('flash'), 350); }
 }
 
-// obstacle hints show for your first two races on each course
-let hintsOn = true;
-function countHintRace() {
-  const key = `lurching-llama-hints-${course.info.id}`;
-  let n = 0;
-  try { n = parseInt(localStorage.getItem(key), 10) || 0; localStorage.setItem(key, String(n + 1)); } catch { /* storage unavailable */ }
-  hintsOn = n < 2;
-}
-
 function resetRace() {
   setWatching(false);
   game.crownCounted = game.winCounted = false;
@@ -719,7 +699,6 @@ function resetRace() {
   Object.assign(touch, { x: 0, y: 0, duck: false });
   $('knob').style.transform = '';
   document.querySelectorAll('.tbtn.on').forEach((b) => b.classList.remove('on'));
-  hintIdx = 0;
 }
 
 // PLAY shows a quick flyover of the course first; RACE AGAIN goes straight to the countdown.
@@ -740,7 +719,6 @@ function startRace(withIntro) {
 }
 
 function startCountdown() {
-  countHintRace();
   $('intro').classList.add('hidden');
   game.state = 'countdown';
   game.countdown = 2.999;
@@ -1071,9 +1049,6 @@ function step(dt) {
       if (n > 0) { $('count').textContent = n; sfx.beep(false); } else { $('count').textContent = 'GO!'; sfx.beep(true); }
       $('count').classList.remove('pop'); void $('count').offsetWidth; $('count').classList.add('pop');
     }
-    if (game.countdown <= 0 && hintsOn && !player.finished) {
-      showHint('You are top-heavy! Ease off before you stop, and if you start to tip, walk <b>toward</b> the lean');
-    }
     if (game.countdown <= 0) { game.state = 'racing'; setTimeout(() => { $('count').textContent = ''; }, 700); }
   }
   const racing = game.state === 'racing' || game.state === 'results';
@@ -1110,7 +1085,6 @@ function step(dt) {
 
   if (game.state === 'racing' && !player.finished) recordFrame(dt);
   updateGhost(dt);
-  if (game.state === 'racing' && hintsOn && hintIdx < course.hints.length && player.pos.z > course.hints[hintIdx].z) showHint(course.hints[hintIdx++].text);
 
   // idle llamas glance at the nearest neighbour's face
   for (const a of racers) {
