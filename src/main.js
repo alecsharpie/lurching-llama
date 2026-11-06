@@ -20,10 +20,11 @@ renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-const HORIZON = new THREE.Color('#d9e8ef');
-scene.fog = new THREE.Fog(HORIZON, 80, 650);
+// 4000m up the air is thin and clear: a deep blue sky and only a faint blue haze on the far peaks
+const HORIZON = new THREE.Color('#cfe0ec');
+scene.fog = new THREE.Fog(HORIZON, 120, 950);
 
-const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 900);
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1400);
 
 // sky dome gradient
 {
@@ -31,17 +32,19 @@ const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerH
     new THREE.SphereGeometry(600, 32, 16),
     new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { top: { value: new THREE.Color('#3b82d4') }, mid: { value: new THREE.Color('#a4cdee') }, bottom: { value: HORIZON } },
+      uniforms: { top: { value: new THREE.Color('#1557c0') }, mid: { value: new THREE.Color('#8fc0ec') }, bottom: { value: HORIZON } },
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 bottom; varying vec3 vP; void main(){ float h = vP.y; vec3 c = h > 0.0 ? mix(mid, top, smoothstep(0.0, 0.6, h)) : mix(mid, bottom, smoothstep(0.0, 0.25, -h)); gl_FragColor = vec4(c, 1.0); }',
     }),
   );
+  sky.renderOrder = -1; // drawn first: it writes no depth, so anything beyond its radius still shows
+  sky.frustumCulled = false;
   scene.add(sky);
   scene.userData.sky = sky;
 }
 
-scene.add(new THREE.HemisphereLight('#e2f0ff', '#8aa86a', 1.05));
-const sun = new THREE.DirectionalLight('#fff4e0', 2.4);
+scene.add(new THREE.HemisphereLight('#dcebff', '#a8955c', 1.0));
+const sun = new THREE.DirectionalLight('#fff6e8', 2.6);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 const SC = 22;

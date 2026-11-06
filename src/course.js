@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { clamp, wrapAngle, canvasTexture, woolGeometry, rng, closestOnSegment } from './util.js';
 import {
-  grassTex, earthTex, woodTex, stoneTex, millTex, barkTex, ringsTex, hayTex, railTex, toadstoolTex,
-  mountains, pines, meadowTufts, rockColumn, bunting,
+  grassTex, earthTex, woodTex, stoneTex, millTex, barkTex, ringsTex, hayTex, railTex, ashlarTex, aguayoTex, thatchTex,
+  drawAguayoBand, ichuTussocks, rockColumn, bunting, pomMat,
 } from './meadow.js';
+import { Altiplano } from './altiplano.js';
 
 const LAKE_Y = -26;
 // A per-use copy of a shared texture (own repeat/offset, same image on the GPU).
@@ -33,34 +34,13 @@ function checkerTex(c1, c2, n = 8) {
   return t;
 }
 
-// Tileable rippling normal map for the lake (sum of periodic sines).
-function gooNormalMap() {
-  const N = 128;
-  const h = (x, y) => {
-    const u = (x / N) * Math.PI * 2, v = (y / N) * Math.PI * 2;
-    return Math.sin(u * 2 + Math.sin(v * 3) * 0.8) + Math.sin(v * 3 + Math.sin(u * 2) * 1.1) * 0.8 + Math.sin((u + v) * 5) * 0.25;
-  };
-  const t = canvasTexture(N, N, (ctx) => {
-    const img = ctx.createImageData(N, N);
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-      const dx = h(x + 1, y) - h(x - 1, y), dy = h(x, y + 1) - h(x, y - 1);
-      const nx = -dx * 2, ny = -dy * 2, nz = 1, l = Math.hypot(nx, ny, nz);
-      const i = (y * N + x) * 4;
-      img.data[i] = (nx / l * 0.5 + 0.5) * 255;
-      img.data[i + 1] = (ny / l * 0.5 + 0.5) * 255;
-      img.data[i + 2] = (nz / l * 0.5 + 0.5) * 255;
-      img.data[i + 3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-  });
-  t.colorSpace = THREE.NoColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  return t;
-}
-
 function textTex(text, bg, fg, w = 1024, h = 192) {
   return canvasTexture(w, h, (ctx) => {
     ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+    // woven aguayo borders top and bottom
+    const r = rng(text.length * 31);
+    drawAguayoBand(ctx, 0, 0, w, h * 0.13, r, 2);
+    drawAguayoBand(ctx, 0, h * 0.87, w, h * 0.13, r, 2);
     ctx.fillStyle = fg;
     ctx.font = `${Math.floor(h * 0.62)}px "Lilita One", "Arial Black", sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -75,6 +55,23 @@ const CAP_Y = 0.015;
 const decal = (color, extra = {}, k = 1) => std(color, { polygonOffset: true, polygonOffsetFactor: -1 * k, polygonOffsetUnits: -4 * k, ...extra });
 
 function shadowed(m) { m.castShadow = true; m.receiveShadow = true; return m; }
+
+// A fat yarn pompom in wedges of hot pink, orange, yellow and teal, curly and shaded in its crevices.
+let POMPOM = null;
+function pompomGeometry() {
+  if (POMPOM) return POMPOM;
+  const g = woolGeometry(63, 5, { lump: 0.05, curl: 0.38, curlFreq: 13 });
+  const p = g.attributes.position, col = g.attributes.color;
+  const cols = ['#e91e63', '#ff7a1a', '#ffc928', '#1e9e8a', '#e91e63', '#7b2d8b'].map((c) => new THREE.Color(c));
+  for (let i = 0; i < p.count; i++) {
+    const a = Math.atan2(p.getZ(i), p.getX(i));
+    const c = cols[Math.floor(((a / (Math.PI * 2)) + 1) * cols.length) % cols.length];
+    const sh = col.getX(i);
+    col.setXYZ(i, c.r * sh, c.g * sh, c.b * sh);
+  }
+  POMPOM = g;
+  return g;
+}
 
 // ---------------------------------------------------------------------------
 
@@ -334,7 +331,7 @@ class TiltDisc {
 
 export const COURSES = [
   { id: 'gauntlet', name: 'The Wobbly Gauntlet', sub: 'Sweepers · Sliders · Hay Hill · Windy Beams · Hammers · Spinners · Teeter-Totters' },
-  { id: 'rumble', name: 'Log Roll Rumble', sub: 'Conveyor Pushers · Spinning Log · Wavy Plank · Tilting Table · Elevators · Toadstools · Sweepers' },
+  { id: 'rumble', name: 'Log Roll Rumble', sub: 'Conveyor Pushers · Spinning Log · Wavy Plank · Tilting Table · Elevators · Pompom Bounces · Sweepers' },
   { id: 'duck', name: 'Duck Duck Llama', sub: 'Duck Bars · Hurdles · Sinking Stones · Head-Hunter Pendulums' },
 ];
 
@@ -405,7 +402,7 @@ export class Course {
       mesh.add(cap);
       if (look === 'turf') {
         // a grassy lip that overhangs the earth a little
-        const lip = shadowed(new THREE.Mesh(new THREE.TorusGeometry(o.r - 0.04, 0.13, 8, 48), std('#5f9b3e', { roughness: 1 })));
+        const lip = shadowed(new THREE.Mesh(new THREE.TorusGeometry(o.r - 0.04, 0.13, 8, 48), std('#7e9a45', { roughness: 1 })));
         lip.rotation.x = Math.PI / 2; lip.position.y = o.hy - 0.06;
         mesh.add(lip);
       }
@@ -433,7 +430,7 @@ export class Course {
       mesh.add(cap);
       if (o.belt) beltTop = cap.material.map;
       if (look === 'turf') {
-        const lip = shadowed(new THREE.Mesh(new RoundedBoxGeometry(o.hx * 2 - 0.01, 0.2, o.hz * 2 - 0.01, 2, 0.08), std('#5f9b3e', { roughness: 1 })));
+        const lip = shadowed(new THREE.Mesh(new RoundedBoxGeometry(o.hx * 2 - 0.01, 0.2, o.hz * 2 - 0.01, 2, 0.08), std('#7e9a45', { roughness: 1 })));
         lip.position.y = o.hy - 0.13; // its top stays 3cm under the grass cap
         mesh.add(lip);
       }
@@ -450,7 +447,7 @@ export class Course {
 
   // Static platforms stand on rock columns rising out of the lake, and grow a few flowers.
   groundUnder(p) {
-    const colMat = this.colMat || (this.colMat = std('#ffffff', { map: texCopy(stoneTex(), 2, 4), roughness: 1 }));
+    const colMat = this.colMat || (this.colMat = std('#ffffff', { map: texCopy(stoneTex(), 2, 4), roughness: 1, vertexColors: true }));
     const column = (x, z, r, yTop) => {
       const h = yTop - LAKE_Y + 1;
       const m = shadowed(new THREE.Mesh(rockColumn(r, h), colMat));
@@ -506,7 +503,7 @@ export class Course {
     fulcrum.position.set(0, 4.7, z);
     fulcrum.userData.attached = true;
     this.scene.add(fulcrum);
-    const pillar = shadowed(new THREE.Mesh(rockColumn(1.1, 4.2 - LAKE_Y), std('#ffffff', { map: texCopy(stoneTex(), 2, 4) })));
+    const pillar = shadowed(new THREE.Mesh(rockColumn(1.1, 4.2 - LAKE_Y), std('#ffffff', { map: texCopy(stoneTex(), 2, 4), vertexColors: true })));
     pillar.position.set(0, (4.2 + LAKE_Y) / 2, z);
     this.scene.add(pillar);
     sw.mesh = g;
@@ -835,7 +832,7 @@ export class Course {
     ball.position.set(0, -1.5, z);
     ball.userData.attached = true;
     this.scene.add(ball);
-    const pillar = shadowed(new THREE.Mesh(rockColumn(1.3, -2.2 - LAKE_Y), std('#ffffff', { map: texCopy(stoneTex(), 2, 4) })));
+    const pillar = shadowed(new THREE.Mesh(rockColumn(1.3, -2.2 - LAKE_Y), std('#ffffff', { map: texCopy(stoneTex(), 2, 4), vertexColors: true })));
     pillar.position.set(0, (-2.2 + LAKE_Y) / 2, z);
     this.scene.add(pillar);
     td.mesh = g;
@@ -850,19 +847,16 @@ export class Course {
     this.pads = spots.map(([x, y, z]) => {
       const g = new THREE.Group();
       g.position.set(x, y, z);
-      // a springy giant toadstool
-      const base = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 0.3, 16), std('#efe6d2')));
+      // a giant springy yarn pompom (like the tassels herders tie in their llamas' ears) on a woven drum
+      const base = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 0.3, 16), std('#ffffff', { map: aguayoTex(2) })));
       base.position.y = 0.12;
       g.add(base);
       const coil = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.42, 0.3, 16), std('#f6efdf')));
       g.add(coil);
       const top = new THREE.Group();
-      const capM = shadowed(new THREE.Mesh(new THREE.SphereGeometry(1, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), std('#ffffff', { map: toadstoolTex(), roughness: 0.6 })));
-      capM.scale.set(0.95, 0.42, 0.95);
+      const capM = shadowed(new THREE.Mesh(pompomGeometry(), std('#ffffff', { vertexColors: true, roughness: 1 })));
+      capM.scale.set(0.95, 0.5, 0.95);
       top.add(capM);
-      const gills = new THREE.Mesh(new THREE.CircleGeometry(0.95, 28), std('#e8d9bb', { side: THREE.DoubleSide }));
-      gills.rotation.x = Math.PI / 2;
-      top.add(gills);
       g.add(top);
       this.scene.add(g);
       return { x, y, z, r: 0.95, top, coil, squash: 0, vel: 0, aim, minVz };
@@ -972,14 +966,15 @@ export class Course {
       const housing = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.4, 1.2), std('#ffffff', { map: texCopy(woodTex(1)) })));
       housing.position.z = -0.8;
       g.add(housing);
-      const roof = shadowed(new THREE.Mesh(new THREE.ConeGeometry(1.05, 0.9, 4), std('#b5442e')));
+      const roof = shadowed(new THREE.Mesh(new THREE.ConeGeometry(1.05, 0.9, 4), std('#ffffff', { map: texCopy(thatchTex(), 1, 1), roughness: 1 })));
       roof.position.set(0, 1.1, -0.8); roof.rotation.y = Math.PI / 4;
       g.add(roof);
       const hub = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), std('#6b4a2e')));
       g.add(hub);
       const blades = new THREE.Group();
       for (let i = 0; i < 4; i++) {
-        const b = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.55, 2.0, 0.06), std('#f3ead2')));
+        // sails of woven aguayo cloth
+        const b = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.55, 2.0, 0.06), std('#ffffff', { map: aguayoTex(1 + (i % 3)) })));
         b.position.y = 1.0;
         const holder = new THREE.Group();
         holder.rotation.z = (i / 4) * Math.PI * 2;
@@ -1009,19 +1004,29 @@ export class Course {
 
   buildDecor() {
     const S = this.scene;
-    // timber gateways with a painted sign and bunting
+    // gateways: Inca-style fitted-stone pillars, a eucalyptus lintel, a woven banner and bunting
     const arch = (z, y, text, c1) => {
       const g = new THREE.Group();
       g.position.set(0, y, z);
       const bark = std('#ffffff', { map: texCopy(barkTex(), 1, 3), roughness: 1 });
+      const masonry = std('#ffffff', { map: texCopy(ashlarTex(), 1, 3), roughness: 1 });
       for (const s of [1, -1]) {
-        const p = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 8, 10), bark));
+        // slightly battered (narrower at the top), the way Inca walls lean in
+        const p = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.8, 8, 4, 1), masonry));
+        p.rotation.y = Math.PI / 4;
         p.position.set(s * 6.2, 4, 0);
         g.add(p);
         this.occluders.push(p);
-        const cap = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.6, 10), std('#6b4a2e')));
-        cap.position.set(s * 6.2, 8.3, 0);
+        const cap = shadowed(new THREE.Mesh(new RoundedBoxGeometry(1.1, 0.45, 1.1, 2, 0.08), std('#ffffff', { map: texCopy(stoneTex()) })));
+        cap.position.set(s * 6.2, 8.2, 0);
         g.add(cap);
+        // a pompom tassel hanging off each pillar top
+        for (const k of [-1, 1]) {
+          const pom = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), pomMat(k > 0 ? '#d81b60' : '#ffc928'));
+          pom.scale.setScalar(0.17);
+          pom.position.set(s * 6.2 + k * 0.4, 7.7, 0.62);
+          g.add(pom);
+        }
       }
       const beam = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 13.6, 10), bark));
       beam.rotation.z = Math.PI / 2; beam.position.y = 7.9;
@@ -1064,79 +1069,21 @@ export class Course {
       }
     }
 
-    // fleecy clouds, the same wool as the llamas
-    const cloudGeo = woolGeometry(77, 6, { lump: 0.2, curl: 0.08, curlFreq: 3 });
-    const cloudMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, vertexColors: true, emissive: '#eef6ff', emissiveIntensity: 0.35 });
-    const puffs = [];
-    for (let i = 0; i < 40; i++) {
-      const side = this.rand() < 0.5 ? -1 : 1;
-      const cx = side * (30 + this.rand() * 90), cy = 18 + this.rand() * 40, cz = -60 + this.rand() * 360;
-      const rot = this.rand() * Math.PI, c = Math.cos(rot), sn = Math.sin(rot);
-      const n = 3 + Math.floor(this.rand() * 4);
-      for (let k = 0; k < n; k++) {
-        const sc = 2 + this.rand() * 3;
-        const lx = k * 3 - n * 1.5 + this.rand(), ly = this.rand() * 1.5, lz = this.rand() * 2;
-        puffs.push(new THREE.Matrix4().compose(
-          new THREE.Vector3(cx + lx * c + lz * sn, cy + ly, cz - lx * sn + lz * c),
-          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot),
-          new THREE.Vector3(sc * 1.3, sc * 0.7, sc)));
-      }
-    }
-    const clouds = new THREE.InstancedMesh(cloudGeo, cloudMat, puffs.length);
-    puffs.forEach((m, i) => clouds.setMatrixAt(i, m));
-    S.add(clouds);
+    // ichu tussocks and flowers along the edges of the turf
+    ichuTussocks(S, this.tufts, 0.85);
 
-    // grassy rock stacks rising out of the lake, topped with pines
-    const mid = this.finishZ / 2;
-    const treeSpots = [];
-    const stackMat = std('#ffffff', { map: texCopy(stoneTex(), 3, 5), roughness: 1 });
-    const turfMat = std('#ffffff', { map: texCopy(grassTex(), 3, 3), roughness: 1 });
-    const stacks = [];
-    for (let i = 0, tries = 0; i < 16 && tries < 200; tries++) {
-      const side = i % 2 ? -1 : 1;
-      const r = 5 + this.rand() * 9, top = -12 + this.rand() * 22;
-      const x = side * (16 + r + this.rand() * 70), z = -50 + this.rand() * (this.finishZ + 110);
-      if (stacks.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + r + 4)) continue;
-      stacks.push({ x, z, r });
-      i++;
-      const col = shadowed(new THREE.Mesh(rockColumn(r, top - LAKE_Y + 2), stackMat));
-      col.position.set(x, (top + LAKE_Y) / 2 - 1, z);
-      S.add(col);
-      const cap = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(r * 0.95, r * 0.9, 0.6, 20), turfMat));
-      cap.position.set(x, top, z);
-      S.add(cap);
-      const n = Math.floor(r * 0.9);
-      for (let k = 0; k < n; k++) {
-        const a = this.rand() * Math.PI * 2, d = Math.sqrt(this.rand()) * r * 0.75;
-        treeSpots.push([x + Math.cos(a) * d, top + 0.3, z + Math.sin(a) * d, 1.2 + this.rand() * 1.6]);
-      }
+    // the wider world: lake, stone forest, puna, villages, mountains, condors...
+    const avoid = [{ x: 0, z: this.finishZ / 2, r: 0 }];
+    for (const p of this.platforms) {
+      if (p.type === 'cyl') { avoid.push({ x: p.pos.x, z: p.pos.z, r: p.r + 3 }); continue; }
+      const cx = p.type === 'ramp' ? p.cx : p.pos.x, hx = p.type === 'ramp' ? p.w / 2 : p.hx;
+      const z0 = p.type === 'ramp' ? p.z0 : p.pos.z - p.hz, z1 = p.type === 'ramp' ? p.z1 : p.pos.z + p.hz;
+      const step = Math.max(2, hx * 1.5);
+      for (let z = z0; z <= z1 + 0.01; z += step) avoid.push({ x: cx, z, r: hx + 4 });
     }
-    // a few lone pines along the lake shore far below
-    for (let i = 0; i < 60; i++) {
-      const a = this.rand() * Math.PI * 2, d = 165 + this.rand() * 40;
-      treeSpots.push([Math.cos(a) * d, LAKE_Y + 0.3, mid + Math.sin(a) * d * 1.45, 2.5 + this.rand() * 2]);
-    }
-    pines(S, treeSpots);
-    mountains(S, mid);
-    // green valley floor ringing the lake (it rises into the foothills)
-    const valley = new THREE.Mesh(new THREE.RingGeometry(150, 900, 64, 4), std('#6f9e4c', { roughness: 1 }));
-    valley.rotation.x = -Math.PI / 2;
-    valley.position.set(0, LAKE_Y + 0.3, mid);
-    valley.scale.set(1, 1.45, 1);
-    S.add(valley);
-    meadowTufts(S, this.tufts);
-
-    // the mountain lake far below
-    const sea = new THREE.Mesh(new THREE.CircleGeometry(160, 64), std('#3c8fb3', {
-      roughness: 0.12, metalness: 0.1, emissive: '#0d3b52', emissiveIntensity: 0.25,
-      normalMap: gooNormalMap(), normalScale: new THREE.Vector2(0.35, 0.35),
-    }));
-    sea.material.normalMap.repeat.set(30, 30);
-    sea.rotation.x = -Math.PI / 2;
-    sea.scale.set(1, 1.45, 1);
-    sea.position.set(0, LAKE_Y, mid);
-    S.add(sea);
-    this.sea = sea;
+    for (let z = -12; z < this.finishZ + 14; z += 4) avoid.push({ x: 0, z, r: 10 }); // keep the racing line clear
+    this.land = new Altiplano(S, { lakeY: LAKE_Y, finishZ: this.finishZ, rand: this.rand, avoid });
+    this.sea = this.land.sea;
   }
 
   // -------------------------------------------------------------------------
@@ -1166,7 +1113,7 @@ export class Course {
 
   update(t, dt, llamas) {
     this.time = t;
-    this.sea.material.normalMap.offset.set(t * 0.012, t * 0.007);
+    this.land.update(t, dt, llamas.find((l) => l.isPlayer));
     for (const sw of this.seesaws) sw.applyLoads(llamas, dt);
     for (const td of this.tilts) td.applyLoads(llamas, dt);
     for (const sk of this.sinkers) {

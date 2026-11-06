@@ -1,6 +1,6 @@
 # Lurching Llama 🦙
 
-A wobbly obstacle-course party race through an alpine meadow, in the browser. You're a very
+A wobbly obstacle-course party race across the high Andean altiplano, in the browser. You're a very
 top-heavy llama with a ridiculously long, springy neck. You set off quickly but stop slowly:
 brake and your whole body lurches on, the neck flinging forward and dragging you with it. Keep
 your head over your hooves, dodge the obstacles, and wobble to the finish ahead of seven bot
@@ -52,7 +52,7 @@ you'd balance a broom on your hand. Tip too far and over you go.
 
 
 **The Wobbly Gauntlet.** Spinning sweepers (jump the low red bar, duck the high blue one) → sliding rafts over
-the lake → hay-bale hill → toadstool bounce pads and windy balance beams by the windmills → swinging hay-bale hammers → spinning
+the lake → hay-bale hill → giant yarn-pompom bounce pads and windy balance beams by the aguayo-sailed windmills → swinging hay-bale hammers → spinning
 millstones → teeter-totters that tip under your weight (your heavy head counts!) → finish.
 
 **Log Roll Rumble.** A conveyor belt with sliding hay-bale pushers → a giant log lying along the
@@ -71,6 +71,20 @@ blanket (tartan, stripes, polka dots, diamonds...) and a hat
 (party hat, top hat, beanie, flower crown or propeller cap). Your choices and your best time on
 each course are saved in the browser, and in Quick Race your best run comes back as a see-through
 ghost llama to race against. The title screen also tracks Shows played, Crowns and Quick Race wins.
+
+## The world
+
+The course runs where llamas actually live: the altiplano, about 4000m up in the Andes. Platforms
+stand on towers of eroded tuff rising out of a deep-blue Titicaca-style lake, like the stone forest
+at Huayllay. The towers are topped with ichu bunchgrass, gnarled red-barked queñua trees, puya
+spikes, yareta cushions, woolly "old man" cacti, cairns, and llamas who have climbed up to watch
+the race (they follow you with their eyes). On the water there are totora reed beds, reed boats
+and floating Uros-style reed islands. Ashore, golden puna rises past emerald bofedal bogs and
+dry-stone walls to Inca terraces striped with quinoa, adobe hamlets with eucalyptus windbreaks,
+stone corrals, grazing llama herds and wild vicuñas. Behind all of it are a striped "rainbow
+mountain", the snowy cordillera and two volcanoes, with condors circling overhead. The course
+props fit in too: Inca-masonry gateways, woven aguayo banners and windmill sails, and bunting
+hung with the yarn pompoms herders tie into their llamas' ears.
 
 ## How the llama works
 
@@ -91,6 +105,11 @@ Everything is procedural, with no model files or animation clips:
   the spot or when shoved.
 - **Fleece**: displaced, noise-curled icosphere "wool" with crevice shading baked into vertex
   colours.
+- **Cartoon lurch** (visual only, so the gameplay tuning is untouched): the barrel sits on a soft,
+  under-damped spring that overshoots and sloshes after every stop and turn, waddles side to side
+  with each stride and drifts tipsily when idle. The neck's lean is drawn about 2.6× bigger than
+  the physics (soft-capped so it never folds past flat), a wave snakes up it every stride, and the
+  head sits on its own floppy bobble-head spring.
 - **Secondary motion**: springy ears with pompoms, blanket tassels, tail, blinking, sideways
   cud chewing, squash and stretch, breathing, and a panic face when you're about to topple.
   Ears pin back when a llama is annoyed, idle llamas glance at their neighbours, and a llama
@@ -103,7 +122,9 @@ Everything is procedural, with no model files or animation clips:
 - `src/main.js`: game loop, camera, input, bots, race flow, effects
 - `src/llama.js`: the llama: model, balance physics, gait, IK and procedural animation
 - `src/course.js`: platforms, obstacles, wind and collision queries
-- `src/meadow.js`: procedural meadow textures, mountains, pines and other scenery
+- `src/meadow.js`: procedural textures (puna turf, tuff, Inca masonry, aguayo weaving, reed, thatch,
+  adobe) and shared scenery pieces (stone-forest columns, ichu tussocks, bunting)
+- `src/altiplano.js`: the world around the course (see below)
 - `src/audio.js`: synthesised sound effects and music
 - `src/util.js`: noise, wool geometry and helpers
 - `tools/check-scenery.mjs`: headless checks for z-fighting and for moving pieces clipping

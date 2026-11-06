@@ -424,6 +424,7 @@ export class Llama {
 
     this.prevVel = new THREE.Vector2();
     this.surge = { f: 0, s: 0, vf: 0, vs: 0 }; // body sloshing over the hooves (forward, sideways)
+    this.headWob = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 }; // the head's own floppy spring on top of the neck
     this.acc = new THREE.Vector2();
 
     // Balance state: the neck as a springy inverted pendulum (world x/z lean in radians).
@@ -847,6 +848,7 @@ export class Llama {
     this.neckScaleVel = 2;
     this.idleT = 0;
     Object.assign(this.surge, { f: 0, s: 0, vf: 0, vs: 0 });
+    Object.assign(this.headWob, { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 });
     this.resetLegs();
   }
 
@@ -1195,21 +1197,27 @@ export class Llama {
     const af = this.acc.x * fwdX + this.acc.y * fwdZ;
     const gw = this.gaitW;
     const gb = this.gallopB, ph = this.gaitPhase * Math.PI * 2;
-    const sway = Math.sin(ph) * lerp(0.02, 0.07, this.paceB) * gw * (1 - gb);
+    // a big, goofy side-to-side waddle: every stride rolls the whole barrel over
+    const sway = Math.sin(ph) * lerp(0.07, 0.15, this.paceB) * gw * (1 - gb);
     // gallop: rocking-horse pitch and a floaty bound between footfalls
-    const bob = -Math.cos(ph * 2) * lerp(0.018, 0.03, this.paceB) * gw * (1 - gb) + Math.sin(ph - 0.9) * 0.07 * gb;
+    const bob = -Math.cos(ph * 2) * lerp(0.035, 0.055, this.paceB) * gw * (1 - gb) + Math.sin(ph - 0.9) * 0.09 * gb;
+    // standing still it never quite stops: a slow, tipsy drift
+    const drift = (this.state === 'normal' ? 1 : 0) * (1 - gw * 0.6);
+    const tipsyR = noise3(this.time * 0.6, this.id * 1.7, 4) * 0.09 * drift;
+    const tipsyP = noise3(this.time * 0.5, this.id * 1.7, 11) * 0.05 * drift;
     // Whole-body inertia: the barrel is a jelly on four planted hooves. Brake and it
     // surges on, nose diving and rump kicking up; turn and it swings out wide. The
     // body also tips the way the neck is leaning, so you can see your balance.
     const as = this.acc.x * rightX + this.acc.y * rightZ;
     const S = this.surge;
     const live = normal && this.grounded ? 1 : 0.3;
-    const tf = clamp(-af * 0.034, -0.24, 0.24) * live, ts = clamp(-as * 0.03, -0.2, 0.2) * live;
-    S.vf += (75 * (tf - S.f) - 6.5 * S.vf) * dt;
-    S.vs += (75 * (ts - S.s) - 6.5 * S.vs) * dt;
+    // a soft, under-damped spring: the barrel overshoots and sloshes back a couple of times
+    const tf = clamp(-af * 0.05, -0.34, 0.34) * live, ts = clamp(-as * 0.045, -0.3, 0.3) * live;
+    S.vf += (52 * (tf - S.f) - 3.6 * S.vf) * dt;
+    S.vs += (52 * (ts - S.s) - 3.6 * S.vs) * dt;
     S.f += S.vf * dt; S.s += S.vs * dt;
-    let pitch = -Math.atan2(fy - hy, 0.97) * 0.85 + S.f * 1.6 + lf * 0.3 + Math.sin(ph - 0.4) * 0.1 * gb;
-    let roll = Math.atan2(ly - ry, 0.43) * 0.5 + sway + S.s * 1.7 + ls * 0.32 - this.yawRate * this.speed * 0.012;
+    let pitch = -Math.atan2(fy - hy, 0.97) * 0.85 + S.f * 2.0 + lf * 0.55 + Math.sin(ph - 0.4) * 0.12 * gb + tipsyP;
+    let roll = Math.atan2(ly - ry, 0.43) * 0.5 + sway + S.s * 2.1 + ls * 0.62 - this.yawRate * this.speed * 0.02 + tipsyR;
     if (!this.grounded && normal) pitch += clamp(-this.vel.y * 0.025, -0.15, 0.15);
     let height = BODY_H + clamp((fy + hy) * 0.5, -0.4, 0.4) * 0.7 + bob - this.duck * 0.08;
 
@@ -1217,16 +1225,19 @@ export class Llama {
     this.squashVel += (-90 * this.squash - 9 * this.squashVel) * dt;
     this.squash += this.squashVel * dt;
 
-    this.bodyPitch = damp(this.bodyPitch, clamp(pitch, -0.6, 0.6), 12, dt);
-    this.bodyRoll = damp(this.bodyRoll, clamp(roll, -0.6, 0.6), 12, dt);
+    this.bodyPitch = damp(this.bodyPitch, clamp(pitch, -0.75, 0.75), 12, dt);
+    this.bodyRoll = damp(this.bodyRoll, clamp(roll, -0.75, 0.75), 12, dt);
     this.bodyY = damp(this.bodyY, height, 16, dt);
 
     const tumbleTarget = this.state === 'toppled' ? 1 : 0;
     this.tumble = damp(this.tumble, tumbleTarget, this.state === 'toppled' ? 7 : 4.5, dt);
     const T = smoothstep(this.tumble);
     this.body.position.y = lerp(this.bodyY + this.squash * 0.6 + Math.abs(S.f) * 0.15, 0.47, T);
-    this.body.position.z = S.f * 0.55 * (1 - T);
-    this.body.position.x = -S.s * 0.55 * (1 - T);
+    this.body.position.z = S.f * 0.75 * (1 - T);
+    // hips swing out over the planted feet with each stride, and the barrel slews toward the lean
+    this.body.position.x = (-S.s * 0.75 + Math.sin(ph - 0.5) * 0.05 * gw * (1 - gb) + ls * 0.12) * (1 - T);
+    // and the whole body wags its heading as it waddles
+    this.body.rotation.y = (Math.sin(ph) * 0.07 * gw * (1 - gb) - S.s * 0.5 + tipsyR * 0.6) * (1 - T);
     // camelids get up rear end first: tip nose-down mid-rise, then level out
     const rise = this.state === 'rising' ? Math.sin(clamp(this.stateT / 0.75, 0, 1) * Math.PI) * 0.32 : 0;
     this.body.rotation.x = lerp(this.bodyPitch, this.fallPitch, T) + rise;
@@ -1253,16 +1264,22 @@ export class Llama {
     this.neckScale = clamp(this.neckScale + this.neckScaleVel * dt, 0.55, 1.4);
     const ns = this.neckScale;
     const bodyX = this.body.rotation.x, bodyZ = this.body.rotation.z;
-    const nod = Math.sin(this.gaitPhase * Math.PI * 4 + 0.6) * 0.035 * gw;
+    const nod = Math.sin(this.gaitPhase * Math.PI * 4 + 0.6) * 0.06 * gw;
+    // the neck snakes: a wave rolls up it every stride, and it wanders lazily when idle
+    const waveT = this.gaitPhase * Math.PI * 2, idleW = noise3(this.time * 0.7, this.id, 21) * 0.05 * drift;
+    // the lean, exaggerated for show: small leans read big, but the neck never folds past flat
+    const lfV = 1.75 * Math.tanh(lf * 2.6 / 1.75), lsV = 1.6 * Math.tanh(ls * 2.6 / 1.6);
     let sumX = 0, sumZ = 0;
     for (let i = 0; i < NECK_N; i++) {
       const n = this.neck[i];
       const w = NECK_LEAN_W[i];
       const rest = lerp(NECK_REST[i], NECK_DUCK[i], this.duck);
       const prev = i > 0 ? this.neck[i - 1] : null;
-      const tx = rest + (lf * 1.8 - bodyX) * w + (i > 5 ? nod * 0.3 : 0) - (prev ? prev.vx * 0.012 : 0);
-      const tz = (ls * 1.8 - bodyZ) * w - (prev ? prev.vz * 0.012 : 0);
-      const k = 170 - i * 9, damping = 8.5;
+      const wave = Math.sin(waveT - i * 0.55) * 0.045 * gw * (1 - gb * 0.5) + idleW * Math.sin(this.time * 1.3 - i * 0.4);
+      const tx = rest + (lfV - bodyX) * w + (i > 5 ? nod * 0.4 : 0) - (prev ? prev.vx * 0.02 : 0);
+      const tz = (lsV - bodyZ) * w + wave - (prev ? prev.vz * 0.02 : 0);
+      // looser and bouncier toward the head, so it whips and wobbles like a spring doorstop
+      const k = 150 - i * 9, damping = 5.2;
       n.vx += (k * (tx - n.ax) - damping * n.vx) * dt;
       n.vz += (k * (tz - n.az) - damping * n.vz) * dt;
       n.ax += n.vx * dt;
@@ -1287,8 +1304,17 @@ export class Llama {
     if (inp.moveLen > 0.1) look = clamp(wrapAngle(Math.atan2(inp.x, inp.z) - this.yaw), -0.8, 0.8) * 0.7;
     look += this.yawRate * 0.08;
     this.lookYaw = damp(this.lookYaw, look, 5, dt);
-    const headNod = Math.sin(this.gaitPhase * Math.PI * 4) * 0.05 * gw;
-    this.headPivot.rotation.set(-sumX * 0.85 + 0.14 + headNod + this.duck * 0.25 - T * 0.4, 0, -sumZ * 0.8);
+    const headNod = Math.sin(this.gaitPhase * Math.PI * 4) * 0.11 * gw;
+    // bobble-head: the head sits on its own sloppy spring, lagging the neck tip and overshooting
+    const tip = this.neck[NECK_N - 1], HW = this.headWob;
+    HW.vx += (-120 * HW.x - 4 * HW.vx) * dt - tip.vx * dt * 9;
+    HW.vz += (-120 * HW.z - 4 * HW.vz) * dt - tip.vz * dt * 9;
+    HW.vy += (-60 * HW.y - 3 * HW.vy) * dt - this.yawRate * dt * 4;
+    HW.x += HW.vx * dt; HW.z += HW.vz * dt; HW.y += HW.vy * dt;
+    HW.x = clamp(HW.x, -0.6, 0.6); HW.z = clamp(HW.z, -0.6, 0.6); HW.y = clamp(HW.y, -0.5, 0.5);
+    const nT = 1 - T;
+    this.headPivot.rotation.set(-sumX * 0.72 + 0.14 + headNod + this.duck * 0.25 - T * 0.4 + HW.x * nT, HW.y * 0.5 * nT,
+      -sumZ * 0.6 + HW.z * nT + Math.sin(waveT - 5.5) * 0.06 * gw);
     this.head.rotation.y = this.lookYaw;
 
     // jaw chews side to side when idle, gapes when toppled
